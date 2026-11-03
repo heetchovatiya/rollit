@@ -29,7 +29,7 @@ export default {
      try{action=JSON.parse(text).type}catch{return Response.json({error:'Invalid request.'},{status:400,headers})}
      request=new Request(request,{body:text});
     }
-    if(['editOrder','cancelOrder','discardOrder'].includes(action)&&!await validManage(request,env,user))return Response.json({error:'Enter the Manage orders PIN again.'},{status:403,headers});
+    if(['editOrder','cancelOrder'].includes(action)&&!await validManage(request,env,user))return Response.json({error:'Enter the Manage orders PIN again.'},{status:403,headers});
     if(!mayChefAccess(path,request.method,action))return Response.json({error:'Admin access required.'},{status:403,headers});
    }
    const trusted=new Headers(request.headers);trusted.delete('x-rollit-user');trusted.delete('x-rollit-role');
