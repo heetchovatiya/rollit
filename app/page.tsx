@@ -1,4 +1,5 @@
 "use client";
+import { RollitLogo } from "@/components/pos/rollit-logo";
 import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
 import {
@@ -440,7 +441,7 @@ export default function Home() {
           onClick={() => go("Settings")}
         >
           <span className="logo">
-            <img src="/rollit-logo.jpg" alt="Roll-IT" />
+            <RollitLogo alt="Roll-IT" />
           </span>
           <div>
             {settings.businessName}
