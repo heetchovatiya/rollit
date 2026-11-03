@@ -38,14 +38,14 @@ export default function ChefPage(){
  useEffect(()=>{
   const tracker=createSwipeTracker();
   const begin=(e:TouchEvent)=>{swiped.current=false;const target=e.target instanceof Element?e.target:null;tracker.begin(Array.from(e.touches),!target?.closest('input,textarea,select,[data-no-swipe]'));};
-  const move=(e:TouchEvent)=>{if(tracker.move(Array.from(e.touches)))e.preventDefault();};
+  const move=(e:TouchEvent)=>{if(tracker.move(Array.from(e.touches))&&e.cancelable)e.preventDefault();};
   const end=(e:TouchEvent)=>{const destination=tracker.end(Array.from(e.changedTouches),pageRef.current as 0|1|2);if(destination!==null&&destination!==pageRef.current){navigate(destination);swiped.current=true;setTimeout(()=>{swiped.current=false},400);}};
   const cancel=()=>tracker.cancel();
   document.addEventListener('touchstart',begin,{passive:true});document.addEventListener('touchmove',move,{passive:false});document.addEventListener('touchend',end,{passive:true});document.addEventListener('touchcancel',cancel,{passive:true});
   return()=>{document.removeEventListener('touchstart',begin);document.removeEventListener('touchmove',move);document.removeEventListener('touchend',end);document.removeEventListener('touchcancel',cancel)};
  },[]);
  return <div className="chef-app chef-v2" onClickCapture={e=>{if(swiped.current){e.preventDefault();e.stopPropagation();swiped.current=false}}}>
-  <div className="chef-section-bar"><nav className="chef-tabs" aria-label="Chef sections"><button className={page===0?'selected':''} aria-current={page===0?'page':undefined} onClick={()=>navigate(0)}><ShoppingBag size={18}/>New order</button><button className={page===1?'selected':''} aria-current={page===1?'page':undefined} onClick={()=>navigate(1)}><ClipboardList size={18}/>Queue <span>{active.length}</span></button><button className={page===2?'selected':''} aria-current={page===2?'page':undefined} onClick={()=>navigate(2)}><LockKeyhole size={18}/>Manage orders</button></nav><span className="two-finger-hint">Swipe left or right to switch sections</span></div>
+  <div className="chef-section-bar"><nav className="chef-tabs" aria-label="Chef sections"><button className={page===0?'selected':''} aria-current={page===0?'page':undefined} onClick={()=>navigate(0)}><ShoppingBag size={18}/>New order</button><button className={page===1?'selected':''} aria-current={page===1?'page':undefined} onClick={()=>navigate(1)}><ClipboardList size={18}/>Queue <span>{active.length}</span></button><button className={page===2?'selected':''} aria-current={page===2?'page':undefined} onClick={()=>navigate(2)}><LockKeyhole size={18}/>Manage orders</button></nav><span className="chef-swipe-hint">Swipe left or right with one finger</span></div>
   <main className="chef-content">
    {error&&<div className="kitchen-error" role="alert">{error} <button onClick={()=>void load()}>Refresh</button></div>}{notice&&<div role="status" className="kitchen-notice">{notice}</div>}
    {loading?<div className="queue-empty"><ChefHat/><h2>Getting your kitchen ready…</h2></div>:page===0?<div className="chef-order-layout">
