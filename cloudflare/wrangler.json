@@ -1,0 +1,49 @@
+{
+  "name": "roll-it-pos",
+  "main": "../work/cloudflare-deploy/private-entry.mjs",
+  "account_id": "49d73185313bd9d6749d3c32cb9a1591",
+  "compatibility_date": "2026-05-15",
+  "compatibility_flags": [
+    "nodejs_compat"
+  ],
+  "no_bundle": true,
+  "rules": [
+    {
+      "type": "ESModule",
+      "globs": [
+        "**/*.js",
+        "**/*.mjs"
+      ]
+    }
+  ],
+  "assets": {
+    "directory": "../dist/client",
+    "run_worker_first": true,
+    "binding": "ASSETS"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "roll-it-pos",
+      "database_id": "6afcd756-7ec2-499d-ae05-6388eec507f5"
+    }
+  ],
+  "r2_buckets": [
+    {
+      "binding": "BUCKET",
+      "bucket_name": "roll-it-pos-bills"
+    }
+  ],
+  "workers_dev": true,
+  "preview_urls": false,
+  "observability": {
+    "enabled": true
+  },
+  "base_dir": "../work/cloudflare-deploy",
+  "find_additional_modules": true,
+  "triggers": {
+    "crons": [
+      "*/5 * * * *"
+    ]
+  }
+}
