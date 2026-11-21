@@ -1,6 +1,6 @@
 import {businessDay} from "./business-day";
 import {availableUnits,recipeUsage,itemCost,stockRound} from "./recipes";
-import { deliveredQuantity, deliveryProgress, nextOrderNumber, paidQuantity, paymentDue } from "./delivery";
+import { deliveredQuantity, deliveryProgress, nextOrderNumber, paidQuantity, paymentDue, inCurrentQueue } from "./delivery";
 import { defaultSettings, sections } from "./settings";
 import type { Product, Sale, StockMovement, StoreState } from "./types";
 import type { StoreAction } from "./validation";
@@ -30,6 +30,7 @@ export function normalizeState(raw: Partial<StoreState>): StoreState {
     orders: raw.orders || [],
     products: raw.products || [],
     sales: raw.sales || [],
+    voidedSales: raw.voidedSales || [],
     movements: raw.movements || [],
     restocks: raw.restocks || [],
   };
@@ -174,11 +175,56 @@ export function applyAction(
     event(order,"Edited",action.actor,`${previous} → ${items.map(i=>`${i.qty}× ${i.name}`).join(" · ")}${changesMetadata.length?"; updated "+changesMetadata.join(", "):""}`);
     if(items.every(i=>order.delivered![i.id]===i.qty))order.givenAt=order.givenAt||now;else delete order.givenAt;
     if(order.givenAt&&order.paidAt)order.completedAt=order.completedAt||now;else delete order.completedAt;
+  } else if(action.type==="orderPayment") {
+    const order=state.orders.find(o=>o.id===action.id);
+    if(!order)throw new StoreError("Order not found.",404);
+    if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("This order was discarded or deleted.");
+    if(!inCurrentQueue(order,Date.parse(now))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
+    if(action.payment==="Unpaid"&&!order.paidAt&&!order.paidTotal)return current;
+    if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed. Refresh before changing payment.");
+    if(!order.paidAt&&!order.paidTotal)throw new StoreError("Record payment before changing its mode.");
+    const paidDates=new Set((order.events||[]).filter(event=>event.action==="Paid").map(event=>event.at));
+    const paidTotal=order.paidTotal??order.total;
+    const receipts=state.sales.filter(sale=>sale.orderId===order.id||sale.id===order.id);
+    if(receipts.reduce((sum,sale)=>sum+sale.total,0)!==paidTotal){
+      receipts.push(...state.sales.filter(sale=>!sale.orderId&&sale.id!==order.id&&paidDates.has(sale.date)&&sale.items.every(item=>order.items.some(line=>line.id===item.id&&line.price===item.price))));
+    }
+    if(receipts.some(sale=>sale.returnedAt)||!receipts.length||receipts.reduce((sum,sale)=>sum+sale.total,0)!==paidTotal)throw new StoreError("Payment receipts could not be reconciled. Review this order in Manage orders.");
+    if(action.payment==="Unpaid"){
+      const ids=new Set(receipts.map(sale=>sale.id));
+      state.voidedSales ||= [];
+      state.voidedSales.push(...receipts.map(sale=>({...sale,orderId:order.id,voidedAt:now})));
+      state.sales=state.sales.filter(sale=>!ids.has(sale.id));
+      delete order.paidAt;
+      delete order.payment;
+      delete order.completedAt;
+      order.paidTotal=0;
+      order.paidQuantities={};
+      event(order,"Edited",action.actor,`Payment of ${paidTotal/100} undone; payment receipts retained in the correction log.`);
+    }else{
+      if(receipts.every(sale=>sale.payment===action.payment)&&order.payment===action.payment)return current;
+      const previous=receipts.map(sale=>sale.payment).join(", ");
+      for(const receipt of receipts)receipt.payment=action.payment;
+      order.payment=action.payment;
+      event(order,"Edited",action.actor,`Payment mode changed from ${previous} to ${action.payment}.`);
+    }
+    order.revision=(order.revision||0)+1;
+  } else if(action.type==="orderComplete") {
+    const order=state.orders.find(o=>o.id===action.id);
+    if(!order)throw new StoreError("Order not found.",404);
+    if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("This order was discarded or deleted.");
+    if(order.paidAt&&order.givenAt&&order.payment===action.payment)return current;
+    if(!inCurrentQueue(order,Date.parse(now))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
+    if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed. Refresh before completing it.");
+    let next=state;
+    if(order.paidAt&&order.payment!==action.payment)next=applyAction(next,{type:"orderPayment",id:order.id,originalRevision:order.revision||0,payment:action.payment,manage:action.manage,actor:action.actor},now);
+    else if(!order.paidAt)next=applyAction(next,{type:"orderPaid",id:order.id,originalRevision:order.revision||0,payment:action.payment,actor:action.actor},now);
+    return applyAction(next,{type:"orderGiven",id:order.id,actor:action.actor},now);
   } else if(action.type==="orderUnserved") {
     const order=state.orders?.find(o=>o.id===action.id);
     if(!order)throw new StoreError("Order not found.",404);
     if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("This order was discarded or deleted.");
-    if((order.completedAt||(order.paidAt&&order.givenAt))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
+    if(!inCurrentQueue(order,Date.parse(now))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
     if(!order.givenAt&&deliveryProgress(order).given===0)return current;
     if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed. Refresh before undoing served.");
     order.delivered=Object.fromEntries(order.items.map(item=>[item.id,0]));
@@ -208,7 +254,11 @@ export function applyAction(
     if(action.type==="cancelOrder"||action.type==="discardOrder"){
       const reason=action.type==="discardOrder"?"Order discarded":action.reason;
       if(order.cancelledAt)return current;
-      if(order.paidAt||(order.paidTotal||0)>0)throw new StoreError("Paid orders cannot be removed. Ask an admin about a return.");
+      if(action.type==="discardOrder"){
+        if(!inCurrentQueue(order,Date.parse(now))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
+        if(action.originalRevision!==undefined&&action.originalRevision!==(order.revision||0))throw new StoreError("This order changed. Refresh before discarding it.");
+      }
+      if(action.type==="cancelOrder"&&(order.paidAt||(order.paidTotal||0)>0))throw new StoreError("Paid orders cannot be removed. Ask an admin about a return.");
       for(const item of order.items){const restore=item.qty-deliveredQuantity(order,item.id);if(!restore)continue;const p=state.products.find(p=>p.id===item.id);if(!p)throw new StoreError("Stock cannot be restored. Ask an admin.");ingredients(item,restore,"Order removed",order.id,order.rawInventoryOnly);move(p,restore,"Order cancelled",reason,order.id);}
       order.cancelledAt=now;order.cancelReason=reason;order.revision=(order.revision||0)+1;
       if(action.type==="discardOrder"){order.discardedAt=now;event(order,"Discarded",action.actor,"Order discarded; unserved reservations released.");}
@@ -224,7 +274,7 @@ export function applyAction(
         const due=paymentDue(order);
         const paidItems=order.items.map(i=>({...i,qty:i.qty-paidQuantity(order,i.id)})).filter(i=>i.qty>0);
         order.paidAt=now;order.payment=action.payment;order.revision=(order.revision||0)+1;event(order,"Paid",action.actor,action.payment==="UPI"?"Online payment recorded.":"Cash payment recorded.");
-        state.sales.unshift({id:hasPayment?crypto.randomUUID():order.id,date:now,payment:action.payment,customer:order.customer,items:structuredClone(paidItems),total:due,notes:order.notes,orderType:order.orderType,orderReference:order.orderReference||`Order #${order.number}`,business:order.business});
+        state.sales.unshift({id:hasPayment?crypto.randomUUID():order.id,orderId:order.id,date:now,payment:action.payment,customer:order.customer,items:structuredClone(paidItems),total:due,notes:order.notes,orderType:order.orderType,orderReference:order.orderReference||`Order #${order.number}`,business:order.business});
         order.paidQuantities=Object.fromEntries(order.items.map(i=>[i.id,i.qty]));
         order.paidTotal=order.total;
       }
@@ -546,7 +596,7 @@ export function applyAction(
     }
     sale.returnedAt = now;
     sale.returnReason = action.reason;
-    const order=state.orders?.find(o=>o.id===sale.id);if(order){order.cancelledAt=now;order.cancelReason="Sale returned: "+action.reason;}
+    const order=state.orders?.find(o=>o.id===(sale.orderId||sale.id));if(order){order.cancelledAt=now;order.cancelReason="Sale returned: "+action.reason;}
   }
   return state;
 }

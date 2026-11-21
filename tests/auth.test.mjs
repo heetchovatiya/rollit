@@ -52,4 +52,6 @@ test('chef history includes soft-deleted records with costs redacted; chefs may 
 test('chef can edit queue orders and undo served while remaining signed in',()=>{
  assert.equal(mayChefAccess('/api/pos','POST','editOrder'),true);
  assert.equal(mayChefAccess('/api/pos','POST','orderUnserved'),true);
+ assert.equal(mayChefAccess('/api/pos','POST','orderPayment'),true);
+ assert.equal(mayChefAccess('/api/pos','POST','orderComplete'),true);
 });

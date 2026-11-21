@@ -85,7 +85,7 @@ export const settingsSchema = z.object({
 });
 const ingredientQty=z.number().finite().min(0).max(999999999).refine(n=>Math.abs(n*1e6-Math.round(n*1e6))<0.01,"Use up to six decimal places.");
 export const actionSchema = z.discriminatedUnion("type", [
- z.object({type:z.literal("discardOrder"),id,actor:z.string().max(120).optional()}),
+ z.object({type:z.literal("discardOrder"),manage:z.boolean().optional(),originalRevision:z.number().int().nonnegative().optional(),id,actor:z.string().max(120).optional()}),
  z.object({type:z.literal("ingredient"),billId,id,originalRevision:z.number().int().nonnegative().optional(),name:z.string().trim().min(1).max(180),unit:z.enum(["g","ml","pcs"]),stock:z.number().finite().min(-999999999).max(999999999),unitCost:z.number().finite().min(0).max(999999999),unitsPerPack:ingredientQty.refine(n=>n>=0.001),aliases:z.array(z.string().trim().min(1).max(200)).max(30),archived:z.boolean().default(false),reason:z.string().trim().min(3).max(240)}),
  z.object({type:z.literal("recipe"),productId:id,originalRevision:z.number().int().nonnegative(),enabled:z.boolean(),lines:z.array(z.object({ingredientId:id,qty:ingredientQty.refine(n=>n>=0.001)})).max(50)}),
  z.object({type:z.literal("ingredientReceipt"),id,billId:billId.refine(Boolean,"Upload the bill first."),supplier:z.string().trim().min(1).max(120),invoice:z.string().trim().max(100),invoiceDate:calendarDate,tax:cents.default(0),fees:cents.default(0),invoiceTotal:cents.optional(),lines:z.array(z.object({ingredientId:id,packs:ingredientQty.refine(n=>n>=0.001),packSize:ingredientQty.refine(n=>n>=0.001),packCost:cents,description:z.string().trim().min(1).max(200)})).min(1).max(100)}),
@@ -95,6 +95,8 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({type:z.literal("orderUnserved"),manage:z.boolean().optional(),actor:z.string().max(120).optional(),id,originalRevision:z.number().int().nonnegative()}),
   z.object({type:z.literal("orderGiven"),actor:z.string().max(120).optional(),id}),
   z.object({type:z.literal("orderDelivery"),actor:z.string().max(120).optional(),id,productId:id,deliveredQty:quantity,expectedDelivered:quantity}),
+  z.object({type:z.literal("orderPayment"),manage:z.boolean().optional(),actor:z.string().max(120).optional(),id,originalRevision:z.number().int().nonnegative(),payment:z.enum(["Unpaid","Cash","UPI"])}),
+  z.object({type:z.literal("orderComplete"),manage:z.boolean().optional(),actor:z.string().max(120).optional(),id,originalRevision:z.number().int().nonnegative(),payment:z.enum(["Cash","UPI"])}),
   z.object({type:z.literal("orderPaid"),originalRevision:z.number().int().nonnegative().optional(),actor:z.string().max(120).optional(),id,payment:z.enum(["Cash","UPI"])}),
   z.object({type:z.literal("cancelOrder"),actor:z.string().max(120).optional(),id,reason:z.string().trim().min(3).max(240).default("Order deleted")}),
   z.object({

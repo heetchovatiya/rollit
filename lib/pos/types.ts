@@ -23,6 +23,7 @@ export interface SaleItem {
   cost: number;
 }
 export interface Sale {
+  orderId?: string;
   id: string;
   date: string;
   payment: "Cash" | "Card" | "UPI";
@@ -126,6 +127,7 @@ export interface StoreState {
   settings: BusinessSettings;
   products: Product[];
   sales: Sale[];
+  voidedSales?: (Sale & {voidedAt:string})[];
   movements: StockMovement[];
   restocks: Restock[];
 }

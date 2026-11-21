@@ -13,6 +13,14 @@ export function orderSummary(order:KitchenOrder){
 
 export function inActiveQueue(order:KitchenOrder){return !order.hiddenAt&&!order.cancelledAt&&!order.completedAt&&!(order.paidAt&&order.givenAt);}
 
+export function inCurrentQueue(order:KitchenOrder,now=Date.now()){
+ if(order.hiddenAt||order.cancelledAt||order.deletedAt||order.discardedAt)return false;
+ if(inActiveQueue(order))return true;
+ if(!order.paidAt||!order.givenAt)return false;
+ const completed=Date.parse(order.completedAt||[order.paidAt,order.givenAt].sort().at(-1)!);
+ return now<completed+30000;
+}
+
 export function orderStatus(order:KitchenOrder):'Active'|'Served'|'Paid'|'Completed'|'Discarded'|'Deleted'{
  if(order.hiddenAt||order.deletedAt||order.events?.some(e=>e.action==='Deleted'))return 'Deleted';
  if(order.discardedAt||order.cancelledAt)return 'Discarded';
@@ -30,8 +38,8 @@ export function paymentDue(order:KitchenOrder){return Math.max(0,order.total-(or
 export function queueDayGroups(orders:KitchenOrder[],now=Date.now()){
  const today=businessDay(now);
  return {
-  current:orders.filter(inActiveQueue).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date)),
-  history:orders.filter(order=>!inActiveQueue(order)&&businessDay(order.date)===today)
+  current:orders.filter(order=>inCurrentQueue(order,now)).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date)),
+  history:orders.filter(order=>!inCurrentQueue(order,now)&&businessDay(order.date)===today)
    .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)),
  };
 }

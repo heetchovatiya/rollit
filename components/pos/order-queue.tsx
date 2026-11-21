@@ -5,7 +5,7 @@ import type {KitchenOrder} from '@/lib/pos/types';
 import type {StoreAction} from '@/lib/pos/validation';
 import {money} from '@/lib/pos/format';
 import {DeliveryControls} from './delivery-controls';
-import {deliveryProgress,orderSummary,inActiveQueue,orderStatus,paymentDue,queueDayGroups} from '@/lib/pos/delivery';
+import {deliveryProgress,orderSummary,inActiveQueue,orderStatus,paymentDue,queueDayGroups,inCurrentQueue} from '@/lib/pos/delivery';
 import {OrderEditor,type QueueProduct} from './order-editor';
 import {Dialog} from './dialog';
 
@@ -18,6 +18,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
  onRefresh:()=>Promise<unknown>;
 }){
  const [expanded,setExpanded]=useState<string|null>(null);
+ const [completePayment,setCompletePayment]=useState(false);
  const [pay,setPay]=useState<KitchenOrder|null>(null);
  const [cancel,setCancel]=useState<KitchenOrder|null>(null);
  const [undoServed,setUndoServed]=useState<KitchenOrder|null>(null);
@@ -32,7 +33,8 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
  refreshRef.current=onRefresh;
  useEffect(()=>{
   const timer=setInterval(()=>{setTick(Date.now());if(!document.hidden)void refreshRef.current()},8000);
-  return ()=>clearInterval(timer);
+  const clock=setInterval(()=>setTick(Date.now()),1000);
+  return ()=>{clearInterval(timer);clearInterval(clock)};
  },[]);
  const active=orders.filter(inActiveQueue).sort((a,b)=>a.date.localeCompare(b.date));
  const allHistory=[...orders].sort((a,b)=>b.date.localeCompare(a.date));
@@ -65,7 +67,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
   const status=orderStatus(order),progress=deliveryProgress(order),open=expanded===order.id;
   const minutes=Math.max(0,Math.floor((tick-Date.parse(order.date))/60000));
   const removed=!!order.cancelledAt||!!order.hiddenAt||!!order.deletedAt;
-  const readonly=mode==='queue'&&!inActiveQueue(order);
+  const readonly=mode==='queue'&&!inCurrentQueue(order,tick);
   const hasPayment=!!order.paidAt||!!order.paidTotal;
   return <article className={'queue-card order-status-'+status.toLowerCase()+' '+(open?'expanded':'')} key={order.id}>
    <div className="queue-card-heading">
@@ -79,6 +81,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
      <span className="queue-badges">
       <span className={order.givenAt?'status-done':'status-wait'}>{['Deleted','Discarded','Completed'].includes(status)?status:order.givenAt?'Served':progress.given>0?'Partly served':'Preparing'}</span>
       <span className={order.paidAt?'status-done':'status-unpaid'}>{order.paidAt?(order.payment==='UPI'?'Online paid':'Cash paid'):order.paidTotal?`Due ${money(paymentDue(order))}`:'Unpaid'}</span>
+      {order.paidAt&&order.givenAt&&!readonly&&mode==='queue'&&<small className="queue-history-countdown">History in {Math.max(0,Math.ceil((Date.parse(order.completedAt||[order.paidAt,order.givenAt].sort().at(-1)!)+30000-tick)/1000))}s</small>}
      </span>
      <span className="order-amount"><strong>{money(order.total)}</strong><small><Clock size={12}/>{(mode!=='admin'||showHistory)?new Date(order.date).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}):`${minutes} min`}</small></span>
      {open?<ChevronUp size={19}/>:<ChevronDown size={19}/>}
@@ -87,8 +90,9 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
      <button type="button" role="checkbox" aria-checked={order.givenAt?true:progress.given>0?'mixed':false} aria-label={`${order.givenAt?'Undo served for':'Mark all items served in'} order ${order.number}`} title={order.givenAt?'Undo served status':'Mark every remaining item as served'} className={'queue-given-control '+(order.givenAt?'is-given':progress.given>0?'is-partial':'')} disabled={locked} onClick={()=>toggleServed(order)}>
       <span className="queue-given-box">{order.givenAt?<Check size={18}/>:progress.given>0?<Minus size={18}/>:null}</span><span>{order.givenAt?'Served':'Served all'}</span>
      </button>
-     <button type="button" aria-label={`Record payment for order ${order.number}`} className={'queue-paid-control '+(order.paidAt?'is-paid':'')} disabled={locked||!!order.paidAt} onClick={()=>setPay(order)}><CreditCard size={23}/><span>{order.paidAt?'Paid ✓':'Paid'}</span></button>
-     {mode==='queue'&&inActiveQueue(order)&&!hasPayment&&<button type="button" className="queue-discard-control" aria-label={`Discard order ${order.number}`} disabled={locked} onClick={()=>confirmDiscard(order)}><Ban size={18}/>Discard</button>}
+     <button type="button" aria-label={`Record payment for order ${order.number}`} className={'queue-paid-control '+(order.paidAt?'is-paid':'')} disabled={locked} onClick={()=>{setError('');setCompletePayment(false);setPay(order)}}><CreditCard size={23}/><span>{order.paidAt?'Paid ✓':'Paid'}</span></button>
+     {mode==='queue'&&!readonly&&<button type="button" className="queue-discard-control" aria-label={`Discard order ${order.number}`} disabled={locked} onClick={()=>confirmDiscard(order)}><Ban size={18}/>Discard</button>}
+     {mode==='queue'&&!readonly&&!(order.paidAt&&order.givenAt)&&<button type="button" className="queue-complete-control" disabled={locked} onClick={()=>{setError('');setCompletePayment(true);setPay(order)}}><Check size={18}/><span>Served and paid</span></button>}
     </div>}
    </div>
    {!removed&&!readonly&&(!order.completedAt||mode==='manage')&&<div className="queue-management">
@@ -108,13 +112,13 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
     </div>
     {!removed&&!readonly&&<div className="order-actions">
      <button className={order.givenAt?'done-action':'given-action'} disabled={locked} onClick={()=>toggleServed(order)}><Check size={19}/>{order.givenAt?'Served ✓':progress.given>0?'Serve remaining':'Served all'}</button>
-     <button className={order.paidAt?'done-action':'paid-action'} disabled={locked||!!order.paidAt} onClick={()=>setPay(order)}><CreditCard size={19}/>{order.paidAt?'Paid ✓':'Paid'}</button>
+     <button className={order.paidAt?'done-action':'paid-action'} disabled={locked} onClick={()=>{setError('');setCompletePayment(false);setPay(order)}}><CreditCard size={19}/>{order.paidAt?'Paid ✓':'Paid'}</button>
     </div>}
    </div>}
   </article>;
  }
  return <section className="order-queue">
-  <div className="queue-toolbar"><div><span className="brand-eyebrow">THE PASS</span><h2>{mode==='manage'?'Full order history':mode==='queue'?'Order queue':showHistory?'Order history':'Order queue'} <span className="queue-count">{count}</span></h2><p>{mode==='manage'?'All days, including discarded and deleted orders.':mode==='queue'?"Current orders stay here until paid and served. Today's history is newest first.":showHistory?'Discarded, deleted and completed orders.':'Oldest first. Paid orders stay here until every item is served.'}</p></div><div className="queue-tools">
+  <div className="queue-toolbar"><div><span className="brand-eyebrow">THE PASS</span><h2>{mode==='manage'?'Full order history':mode==='queue'?'Order queue':showHistory?'Order history':'Order queue'} <span className="queue-count">{count}</span></h2><p>{mode==='manage'?'All days, including discarded and deleted orders.':mode==='queue'?"Completed orders stay here for 30 seconds. Today's history is newest first.":showHistory?'Discarded, deleted and completed orders.':'Oldest first. Paid orders stay here until every item is served.'}</p></div><div className="queue-tools">
    {mode==='admin'&&<button onClick={()=>setShowHistory(!showHistory)}>{showHistory?'Back to queue':'History'}</button>}
    <button aria-label="Refresh queue" disabled={locked} onClick={()=>void onRefresh()}><RefreshCw size={18}/></button>
   </div></div>
@@ -137,7 +141,21 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
   </>}
   {edit&&<OrderEditor order={edit} products={products} busy={locked} error={error} onClose={()=>setEdit(null)} onSave={act}/>}
   {undoServed&&<Dialog label="Confirm undo served" onClose={()=>{if(!locked)setUndoServed(null)}}><div className="payment-dialog"><h2>Untick served for order #{undoServed.number}?</h2><p>All items will be marked unserved. A completed order will return to the active queue.</p><button className="brand-primary" disabled={locked} onClick={async()=>{if(await act({type:'orderUnserved',id:undoServed.id,originalRevision:undoServed.revision||0}))setUndoServed(null)}}>Yes, untick served</button><button type="button" disabled={locked} onClick={()=>setUndoServed(null)}>Keep served</button>{error&&<p role="alert" className="kitchen-error">{error}</p>}</div></Dialog>}
-  {pay&&<Dialog label="Record payment" onClose={()=>{if(!locked)setPay(null)}}><div className="payment-dialog"><button className="dialog-x" disabled={locked} onClick={()=>setPay(null)} aria-label="Close payment"><X/></button><span className="brand-eyebrow">ORDER #{pay.number}</span><h2>How was it paid?</h2><p className="payment-total">{money(paymentDue(pay))}</p><p>{pay.paidTotal?`Already paid ${money(pay.paidTotal)}. Collect the remaining balance.`:'Choose the payment received.'}</p><div className="payment-choices"><button disabled={locked} onClick={async()=>{if(await act({type:'orderPaid',id:pay.id,payment:'UPI',originalRevision:pay.revision||0}))setPay(null)}}><CreditCard/><strong>Online</strong><small>UPI / online transfer</small></button><button disabled={locked} onClick={async()=>{if(await act({type:'orderPaid',id:pay.id,payment:'Cash',originalRevision:pay.revision||0}))setPay(null)}}><Banknote/><strong>Cash</strong><small>Cash received</small></button></div><small>This records payment received; it does not collect payment.</small>{error&&<p role="alert" className="kitchen-error">{error}</p>}</div></Dialog>}
-  {cancel&&<Dialog label={discard?'Discard order':'Remove order'} onClose={()=>{if(!locked)setCancel(null)}}><form className="payment-dialog" onSubmit={async event=>{event.preventDefault();if(await act(discard?{type:'discardOrder',id:cancel.id}:(cancel.paidAt||cancel.paidTotal||cancel.cancelledAt)?{type:'archiveOrder',id:cancel.id,originalRevision:cancel.revision||0,reason:'Order deleted'}:{type:'cancelOrder',id:cancel.id,reason:'Order deleted'}))setCancel(null)}}><h2>{discard?'Discard':'Delete'} order #{cancel.number}?</h2><p>{(cancel.paidAt||cancel.paidTotal||cancel.cancelledAt)?'This removes the order from order history. Its sale and deletion log are retained.':discard?'This removes the order from the queue and records it as discarded in history. Raw materials reserved for unserved items will be released.':'Raw materials reserved for unserved items will be released. This deletion is recorded in the activity log.'}</p><button className="brand-primary" disabled={locked}>{discard?'Discard order':'Delete order'}</button><button type="button" disabled={locked} onClick={()=>setCancel(null)}>Keep order</button>{error&&<p role="alert">{error}</p>}</form></Dialog>}
+  {pay&&<Dialog label={completePayment?'Confirm served and paid':pay.paidAt?'Change recorded payment':'Record payment'} onClose={()=>{if(!locked)setPay(null)}}><div className="payment-dialog">
+   <button className="dialog-x" disabled={locked} onClick={()=>setPay(null)} aria-label="Close payment"><X/></button>
+   <span className="brand-eyebrow">ORDER #{pay.number}</span>
+   <h2>{completePayment?'Mark served and paid?':pay.paidAt?'Change recorded payment?':'How was it paid?'}</h2>
+   <p className="payment-total">{money(pay.paidAt?pay.total:paymentDue(pay))}</p>
+   <p>{completePayment?'Confirm the payment mode to mark every item served and the order paid.':pay.paidAt?'Confirm a different payment mode, or mark the order unpaid.':pay.paidTotal?`Already paid ${money(pay.paidTotal)}. Collect the remaining balance.`:'Choose the payment received.'}</p>
+   <div className="payment-choices">{(['UPI','Cash'] as const).map(payment=><button key={payment} disabled={locked||(!completePayment&&!!pay.paidAt&&pay.payment===payment)} onClick={async()=>{
+    const action:StoreAction=completePayment?{type:'orderComplete',id:pay.id,payment,originalRevision:pay.revision||0}:pay.paidAt?{type:'orderPayment',id:pay.id,payment,originalRevision:pay.revision||0}:{type:'orderPaid',id:pay.id,payment,originalRevision:pay.revision||0};
+    if(await act(action))setPay(null);
+   }}>{payment==='UPI'?<CreditCard/>:<Banknote/>}<strong>{payment==='UPI'?'Online':'Cash'}</strong><small>{completePayment?'Confirm served and paid':pay.paidAt?pay.payment===payment?'Current mode':'Change to this mode':payment==='UPI'?'UPI / online transfer':'Cash received'}</small></button>)}</div>
+   {!completePayment&&(pay.paidAt||!!pay.paidTotal)&&<button type="button" className="payment-unpay" disabled={locked} onClick={async()=>{if(await act({type:'orderPayment',id:pay.id,payment:'Unpaid',originalRevision:pay.revision||0}))setPay(null)}}>Confirm mark unpaid</button>}
+   {!completePayment&&(pay.paidAt||!!pay.paidTotal)&&<p>Unpay removes the recorded payment from sales totals and keeps a correction record.</p>}
+   <small>This records payment received; it does not collect payment.</small>
+   {error&&<p role="alert" className="kitchen-error">{error}</p>}
+  </div></Dialog>}
+  {cancel&&<Dialog label={discard?'Discard order':'Remove order'} onClose={()=>{if(!locked)setCancel(null)}}><form className="payment-dialog" onSubmit={async event=>{event.preventDefault();if(await act(discard?{type:'discardOrder',id:cancel.id,originalRevision:cancel.revision||0}:(cancel.paidAt||cancel.paidTotal||cancel.cancelledAt)?{type:'archiveOrder',id:cancel.id,originalRevision:cancel.revision||0,reason:'Order deleted'}:{type:'cancelOrder',id:cancel.id,reason:'Order deleted'}))setCancel(null)}}><h2>{discard?'Discard':'Delete'} order #{cancel.number}?</h2><p>{discard&&(cancel.paidAt||cancel.paidTotal)?'This discards the order and releases unserved stock reservations. The recorded payment remains in sales. Use Unpay first to reverse payment.':(cancel.paidAt||cancel.paidTotal||cancel.cancelledAt)?'This removes the order from order history. Its sale and deletion log are retained.':discard?'This removes the order from the queue and records it as discarded in history. Raw materials reserved for unserved items will be released.':'Raw materials reserved for unserved items will be released. This deletion is recorded in the activity log.'}</p><button className="brand-primary" disabled={locked}>{discard?'Discard order':'Delete order'}</button><button type="button" disabled={locked} onClick={()=>setCancel(null)}>Keep order</button>{error&&<p role="alert">{error}</p>}</form></Dialog>}
  </section>;
 }
