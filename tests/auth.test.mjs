@@ -42,9 +42,14 @@ test('Manage orders PIN grants are bound to a session and revoke on leaving; wro
  assert.equal((await handleManage(req('/api/auth/manage/unlock',{pin:'9999'},cookie),env,user)).status,401);
  const r=await handleManage(req('/api/auth/manage/unlock',{pin:'1234'},cookie),env,user);assert.equal(r.status,200);const {token}=await r.json();const guarded=(session=cookie)=>new Request(base+'/api/pos',{headers:{Cookie:session,'X-Order-Manage-Token':token}});assert.equal(await validManage(guarded(),env,user),true);assert.equal(await validManage(guarded('rollit_session='+'b'.repeat(64)),env,user),false);assert.equal(await validManage(guarded(),env,{id:'other'}),false);
  await handleManage(req('/api/auth/manage/lock',{token},cookie),env,user);assert.equal(await validManage(guarded(),env,user),false);
- for(let i=0;i<8;i++)await handleManage(req('/api/auth/manage/unlock',{pin:'9999'},cookie),env,user);assert.equal((await handleManage(req('/api/auth/manage/unlock',{pin:'1234'},cookie),env,user)).status,429);assert.equal(mayChefAccess('/api/pos','POST','archiveOrder'),false);
+ for(let i=0;i<8;i++)await handleManage(req('/api/auth/manage/unlock',{pin:'9999'},cookie),env,user);assert.equal((await handleManage(req('/api/auth/manage/unlock',{pin:'1234'},cookie),env,user)).status,429);assert.equal(mayChefAccess('/api/pos','POST','archiveOrder'),true);
 });
 
 test('menu illustrations are readable by chef but cannot be written through asset URLs',()=>{assert.equal(mayChefAccess('/menu-art/menu-illustrations.png','GET'),true);assert.equal(mayChefAccess('/menu-art/menu-illustrations.png','POST'),false);});
 
 test('chef history includes soft-deleted records with costs redacted; chefs may discard unpaid orders from the queue',()=>{assert.equal(mayChefAccess('/api/pos','POST','discardOrder'),true);const s=chefState({products:[],orders:[{id:'deleted',hiddenAt:'2026-11-01',items:[{id:'x',cost:12,ingredientUsage:[{unitCost:3}]}]}],settings:{businessName:'Roll-IT'}});assert.equal(s.orders[0].id,'deleted');assert.equal(s.orders[0].items[0].cost,undefined);assert.equal(s.orders[0].items[0].ingredientUsage,undefined);});
+
+test('chef can edit queue orders and undo served while remaining signed in',()=>{
+ assert.equal(mayChefAccess('/api/pos','POST','editOrder'),true);
+ assert.equal(mayChefAccess('/api/pos','POST','orderUnserved'),true);
+});

@@ -21,3 +21,15 @@ export function orderStatus(order:KitchenOrder):'Active'|'Served'|'Paid'|'Comple
 export function nextOrderNumber(orders:KitchenOrder[],at:string,resetTime='00:00'){
  const currentDay=businessDay(at,resetTime);let last=0;for(const o of orders){if((o.businessDay||businessDay(o.date,resetTime))===currentDay&&/^\d+$/.test(o.number))last=Math.max(last,Number(o.number))}return String(last+1).padStart(3,'0');
 }
+
+export function paidQuantity(order:KitchenOrder,productId:string){
+ return order.paidQuantities?.[productId]??(order.paidAt?order.items.find(i=>i.id===productId)?.qty||0:0);
+}
+export function paymentDue(order:KitchenOrder){return Math.max(0,order.total-(order.paidTotal??(order.paidAt?order.total:0)))}
+
+export function queueDayGroups(orders:KitchenOrder[],now=Date.now()){
+ const today=businessDay(now);
+ const rows=orders.filter(order=>businessDay(order.date)===today).sort((a,b)=>a.date.localeCompare(b.date));
+ const cutoff=now-2*60*60*1000;
+ return {recent:rows.filter(order=>Date.parse(order.date)>=cutoff),earlier:rows.filter(order=>Date.parse(order.date)<cutoff)};
+}

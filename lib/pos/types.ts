@@ -107,6 +107,8 @@ export interface KitchenOrder {
   business: Sale["business"];
   givenAt?: string;
   paidAt?: string;
+  paidQuantities?: Record<string, number>;
+  paidTotal?: number;
   payment?: "Cash" | "UPI";
   completedAt?: string;
   cancelledAt?: string;

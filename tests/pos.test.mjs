@@ -806,13 +806,13 @@ test('order edits add or remove lines, preserve quoted prices and reject insuffi
  assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{items:[{id:secondId,qty:20,expectedPrice:7000}]})),/stock/);
  assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{items:[{id:secondId,qty:3,expectedPrice:1}]})),/price changed/);
 });
-test('delivery changes invalidate old editors, given quantities cannot be removed, and paid orders wait for serving',()=>{
+test('delivery changes invalidate old editors, given quantities cannot be removed, and paid orders remain queued until served',()=>{
  let s=applyAction(normalizeState(state()),orderAction());const stale=editKitchen(s.orders[0],{notes:'Stale edit'});
  s=applyAction(s,{type:'orderDelivery',id:saleId,productId:pId,deliveredQty:1,expectedDelivered:0});assert.throws(()=>applyAction(s,stale),/another device/);
  assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:0,expectedPrice:5000}]})),/already served/);
  const trimmed=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:1,expectedPrice:5000}]}));assert.ok(trimmed.orders[0].givenAt);assert.equal(trimmed.products[0].stock,9);
- assert.equal(inActiveQueue(s.orders[0]),true);s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});assert.equal(inActiveQueue(s.orders[0]),true);assert.equal(s.orders[0].completedAt,undefined);s=applyAction(s,{type:'orderGiven',id:saleId});assert.equal(inActiveQueue(s.orders[0]),false);
- assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{notes:'Cannot change paid order'})),/Only unpaid/);assert.throws(()=>applyAction(s,{type:'cancelOrder',id:saleId,reason:'Remove paid'}),/Paid orders/);
+ assert.equal(inActiveQueue(s.orders[0]),true);s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});assert.equal(inActiveQueue(s.orders[0]),true);assert.equal(s.orders[0].completedAt,undefined);
+ assert.equal(applyAction(s,editKitchen(s.orders[0],{notes:'Updated paid order'})).orders[0].notes,'Updated paid order');assert.throws(()=>applyAction(s,{type:'cancelOrder',id:saleId,reason:'Remove paid'}),/Paid orders/);
 });
 test('concurrent edit and payment produce one consistent immutable sale',async()=>{
  const {db}=await seeded();let s=await commitAction(db,orderAction());const edit=editKitchen(s.orders[0],{items:[{id:pId,qty:3,expectedPrice:5000}]});
@@ -870,8 +870,8 @@ test('paid order deletion keeps activity and financial records without a reason'
 
 const {changeCart,removeCartItem}=await import(pathToFileURL(join(temp,'cart.mjs')));
 const {menuArtCell}=await import(pathToFileURL(join(temp,'menu-images.mjs')));
-test('cart shows latest added items first, reductions preserve position, and deleted items can be re-added',()=>{
- let cart={};cart=changeCart(cart,secondId,1);cart=changeCart(cart,pId,1);cart=changeCart(cart,saleId,1);assert.deepEqual(Object.keys(cart),[saleId,pId,secondId]);cart=changeCart(cart,secondId,1);assert.deepEqual(Object.keys(cart),[secondId,saleId,pId]);assert.equal(cart[secondId],2);cart=changeCart(cart,secondId,-1);assert.deepEqual(Object.keys(cart),[secondId,saleId,pId]);const original=structuredClone(cart);cart=removeCartItem(cart,pId);assert.equal(pId in original,true);cart=changeCart(cart,pId,1);assert.deepEqual(Object.keys(cart),[pId,secondId,saleId]);cart=changeCart(cart,pId,-1);assert.equal(pId in cart,false);assert.deepEqual(changeCart({},pId,-1),{});
+test('cart follows tap order rather than menu order and latest additions appear at the top',()=>{
+ let cart={};cart=changeCart(cart,secondId,1);cart=changeCart(cart,pId,1);cart=changeCart(cart,saleId,1);assert.deepEqual(Object.keys(cart),[saleId,pId,secondId]);cart=changeCart(cart,secondId,1);assert.deepEqual(Object.keys(cart),[secondId,saleId,pId]);assert.equal(cart[secondId],2);const original=structuredClone(cart);cart=removeCartItem(cart,pId);assert.deepEqual(original,{[secondId]:2,[pId]:1,[saleId]:1});cart=changeCart(cart,pId,1);assert.deepEqual(Object.keys(cart),[pId,secondId,saleId]);cart=changeCart(cart,pId,-1);assert.equal(pId in cart,false);assert.deepEqual(changeCart({},pId,-1),{});
 });
 test('food and water tiles each select their correct illustration',()=>{
  const names=['Crispy Veg Kathi Roll','Classic Paneer Kathi Roll','Magic Mushroom Kathi Roll','Salted Fries','Peri Peri Fries','Cheesy Peri Peri Fries','Loaded Fries','Water Bottle Small','Water Bottle Big'];assert.deepEqual(names.map(menuArtCell),[[0,0],[1,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]]);
@@ -896,3 +896,105 @@ test('vertical cart scrolling locks out sideways drift and extra fingers cancel 
 test('custom reset time groups orders across midnight and settings changes keep server-owned report start time',()=>{const initial=normalizeState(state());initial.settings.orderResetTime='04:00';let s=applyAction(initial,orderAction(),'2026-11-01T21:00:00.000Z');assert.equal(s.orders[0].businessDay,'2026-11-01');s=applyAction(s,orderAction(secondId),'2026-11-01T22:20:00.000Z');assert.equal(s.orders[0].number,'002');s=applyAction(s,orderAction(crypto.randomUUID()),'2026-11-01T22:30:00.000Z');assert.equal(s.orders[0].number,'001');const settings={...s.settings,dailyReportEnabled:true,reportSender:'reports@example.com',reportStartAt:'2000-01-01'};s=applyAction(s,actionSchema.parse({type:'settings',originalRevision:0,settings}),'2026-11-02T10:00:00.000Z');assert.equal(s.settings.reportStartAt,'2026-11-02T10:00:00.000Z');s=applyAction(s,{type:'settings',originalRevision:1,settings:{...s.settings,theme:'dark',reportStartAt:'1999-01-01'}},'2026-11-02T11:00:00.000Z');assert.equal(s.settings.reportStartAt,'2026-11-02T10:00:00.000Z');assert.equal(actionSchema.safeParse({type:'settings',originalRevision:2,settings:{...s.settings,orderResetTime:'25:12'}}).success,false);assert.equal(actionSchema.safeParse({type:'settings',originalRevision:2,settings:{...s.settings,reportSender:'officialrollit@gmail.com'}}).success,false);});
 
 test('manual raw-material additions retain optional bills, including bill-only edits',()=>{let s=recipeState();const i=s.ingredients[0];const a=actionSchema.parse({type:'ingredient',...i,stock:i.stock+500,originalRevision:i.revision,billId:bill,reason:'Manual delivery'});s=applyAction(s,a);assert.deepEqual(s.ingredients[0].billIds,[bill]);assert.equal(s.ingredientMovements[0].billId,bill);const secondBill='b'.repeat(64);s=applyAction(s,actionSchema.parse({type:'ingredient',...s.ingredients[0],originalRevision:s.ingredients[0].revision,billId:secondBill,reason:'Attach supplier document'}));assert.deepEqual(s.ingredients[0].billIds,[bill,secondBill]);assert.equal(s.ingredients[0].stock,1500);});
+
+test('payment at placement is atomic, retryable, and remains in the service queue',()=>{
+ const action=actionSchema.parse({...orderAction(),payment:'Cash'});
+ let s=applyAction(normalizeState(state()),action);
+ assert.ok(s.orders[0].paidAt);
+ assert.equal(inActiveQueue(s.orders[0]),true);
+ assert.equal(s.sales.length,1);
+ assert.equal(s.products[0].stock,8);
+ assert.strictEqual(applyAction(s,action),s);
+ assert.throws(()=>applyAction(s,{...action,payment:'UPI'}),/already used/);
+ s=applyAction(s,{type:'orderGiven',id:saleId});
+ assert.equal(inActiveQueue(s.orders[0]),false);
+ assert.ok(s.orders[0].completedAt);
+ assert.equal(s.sales.length,1);
+});
+test('adding items after serving reopens fulfillment and reserves only additional quantities',()=>{
+ let s=applyAction(normalizeState(state()),orderAction());
+ s=applyAction(s,{type:'orderGiven',id:saleId});
+ s=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:3,expectedPrice:5000}]}));
+ assert.equal(deliveredQuantity(s.orders[0],pId),2);
+ assert.equal(s.orders[0].givenAt,undefined);
+ assert.equal(s.products[0].stock,7);
+ assert.equal(s.orders[0].total,15000);
+ assert.strictEqual(applyAction(s,editKitchen(s.orders[0])),s);
+});
+
+test('prepaid order additions collect only the extra balance and preserve original receipts',()=>{
+ let s=applyAction(normalizeState(state()),{...orderAction(),payment:'Cash'});
+ const receipt=structuredClone(s.sales[0]);
+ s=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:3,expectedPrice:5000}]}));
+ assert.equal(s.orders[0].paidAt,undefined);
+ assert.equal(s.orders[0].paidTotal,10000);
+ assert.equal(s.orders[0].total,15000);
+ assert.deepEqual(s.sales[0],receipt);
+ assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:1,expectedPrice:5000}]})),/Already-paid/);
+ assert.throws(()=>applyAction(s,{type:'cancelOrder',id:saleId,reason:'Remove'}),/Paid orders/);
+ assert.throws(()=>applyAction(s,{type:'orderPaid',id:saleId,payment:'UPI',originalRevision:0}),/changed/);
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'UPI',originalRevision:s.orders[0].revision});
+ assert.equal(s.sales.length,2);
+ assert.equal(s.sales[0].total,5000);
+ assert.equal(s.sales[0].items[0].qty,1);
+ assert.deepEqual(s.sales[1],receipt);
+ assert.equal(s.sales.reduce((n,r)=>n+r.total,0),s.orders[0].total);
+ assert.equal(s.products[0].stock,7);
+ assert.strictEqual(applyAction(s,{type:'orderPaid',id:saleId,payment:'UPI'}),s);
+ assert.equal(inActiveQueue(s.orders[0]),true);
+ s=applyAction(s,{type:'orderGiven',id:saleId});
+ assert.equal(inActiveQueue(s.orders[0]),false);
+});
+test('legacy prepaid orders can add items without charging the original total again',()=>{
+ let s=applyAction(normalizeState(state()),orderAction());
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ delete s.orders[0].paidTotal;
+ delete s.orders[0].paidQuantities;
+ s=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:3,expectedPrice:5000}]}));
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ assert.equal(s.sales[0].total,5000);
+ assert.equal(s.sales[1].total,10000);
+});
+
+test('undo served reopens completed orders and preserves their payment and stock',()=>{
+ let s=applyAction(normalizeState(state()),orderAction());
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ s=applyAction(s,{type:'orderGiven',id:saleId});
+ const sales=structuredClone(s.sales),stock=s.products[0].stock,paidAt=s.orders[0].paidAt;
+ const undo=actionSchema.parse({type:'orderUnserved',id:saleId,originalRevision:s.orders[0].revision,actor:'chef.one'});
+ assert.throws(()=>applyAction(s,{...undo,originalRevision:0}),/changed/);
+ s=applyAction(s,undo);
+ assert.equal(s.orders[0].givenAt,undefined);
+ assert.equal(s.orders[0].completedAt,undefined);
+ assert.equal(s.orders[0].paidAt,paidAt);
+ assert.equal(deliveryProgress(s.orders[0]).given,0);
+ assert.equal(inActiveQueue(s.orders[0]),true);
+ assert.equal(s.products[0].stock,stock);
+ assert.deepEqual(s.sales,sales);
+ assert.strictEqual(applyAction(s,undo),s);
+ s=applyAction(s,{type:'orderGiven',id:saleId});
+ assert.ok(s.orders[0].completedAt);
+ assert.throws(()=>applyAction(s,undo),/changed/);
+});
+test('undo served rejects deleted and discarded orders',()=>{
+ let s=applyAction(normalizeState(state()),orderAction());
+ s=applyAction(s,{type:'cancelOrder',id:saleId,reason:'Deleted'});
+ assert.throws(()=>applyAction(s,{type:'orderUnserved',id:saleId,originalRevision:s.orders[0].revision}),/discarded or deleted/);
+});
+const {queueDayGroups}=await import(pathToFileURL(join(temp,'delivery.mjs')));
+test('queue shows only the current India calendar day with an inclusive two-hour cutoff',()=>{
+ const now=Date.parse('2026-11-21T10:00:00+05:30');
+ const sample=(id,date)=>({id,date});
+ const groups=queueDayGroups([
+  sample('yesterday','2026-11-20T23:59:59+05:30'),
+  sample('midnight','2026-11-21T00:00:00+05:30'),
+  sample('older','2026-11-21T07:59:59+05:30'),
+  sample('cutoff','2026-11-21T08:00:00+05:30'),
+  sample('recent','2026-11-21T09:00:00+05:30'),
+  sample('completed','2026-11-21T09:30:00+05:30'),
+ ],now);
+ assert.deepEqual(groups.recent.map(order=>order.id),['cutoff','recent','completed']);
+ assert.deepEqual(groups.earlier.map(order=>order.id),['midnight','older']);
+ const midnight=queueDayGroups([sample('yesterday','2026-11-20T23:59:59+05:30'),sample('today','2026-11-21T00:00:00+05:30')],Date.parse('2026-11-21T00:30:00+05:30'));
+ assert.deepEqual(midnight.recent.map(order=>order.id),['today']);
+});

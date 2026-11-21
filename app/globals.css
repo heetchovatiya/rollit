@@ -3351,3 +3351,20 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 
 /* Direct navigation between admin and chef workspaces. */
 .admin-workspace-links{display:flex;gap:8px;flex-wrap:wrap}.admin-workspace-links a,.admin-order-route-actions a{display:inline-flex;align-items:center;justify-content:center;min-height:44px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;text-decoration:none;color:inherit;font-size:12px}.admin-order-route-actions{display:flex;flex-wrap:wrap;gap:10px;margin-bottom:18px}.chef-v2 .chef-cart-body{overflow:visible;display:flex;flex-direction:column;min-height:0}.chef-v2 .chef-cart-items{flex:0 0 auto;height:auto;max-height:234px;overflow-y:auto;overscroll-behavior-y:contain}.chef-v2 .chef-cart-line{min-height:78px}.chef-v2 .chef-order-fields{flex:0 0 auto;overflow:visible}.chef-v2 .chef-cart{height:auto;min-height:0;max-height:none}.chef-v2 .chef-cart-footer{flex-shrink:0}@media(max-width:700px){.admin-session{position:static;flex-wrap:wrap}.admin-workspace-links{width:100%;display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:6px}.admin-workspace-links a{font-size:11px;padding:9px 6px;text-align:center}.admin-order-route-actions a{flex:1}.chef-v2 .chef-cart-items{max-height:234px}.chef-v2 .chef-cart{min-height:0}}
+
+/* Keep ticket details in place while the latest three cart lines scroll. */
+.chef-v2 .chef-cart-body{display:flex;flex-direction:column;overflow:hidden;flex:none;min-height:0}
+.chef-v2 .chef-cart-items{flex:none;max-height:234px;overflow-y:auto;overflow-anchor:none}
+.chef-v2 .chef-order-fields{flex:none;overflow:visible}
+.chef-v2 .chef-cart{height:auto;min-height:0;max-height:none}
+.order-payment-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
+.order-payment-choice select{min-height:40px;max-width:210px;font-size:12px}
+
+.queue-period-heading{font-size:15px;display:flex;gap:10px;align-items:center;margin:20px 0 12px}
+.queue-period-heading small{font-size:12px;color:var(--muted)}
+.queue-earlier-orders{margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
+.queue-earlier-orders>summary{cursor:pointer;padding:14px 4px;font-weight:600}
+.queue-earlier-orders>summary>span{font-size:12px;font-weight:400;margin-left:12px;color:var(--muted)}
+.queue-earlier-orders>.queue-list{margin-top:12px}
+.order-confirm-items{display:grid;gap:12px;max-height:240px;overflow-y:auto;margin:20px 0}
+.order-confirm-items>div{display:flex;justify-content:space-between;gap:20px;font-size:14px}
