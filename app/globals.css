@@ -3368,10 +3368,14 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 .order-confirm-items>div{display:flex;justify-content:space-between;gap:20px;font-size:14px}
 
 .queue-row-actions{flex-wrap:wrap;justify-content:flex-end}
-.queue-complete-control{display:flex;align-items:center;justify-content:center;gap:6px;min-height:46px;border:1px solid #a9b99b;border-radius:10px;background:#e4ecd9;color:#3f5d2e;padding:10px;font-size:11px;font-weight:600}
+.queue-complete-control{display:flex;align-items:center;justify-content:center;gap:6px;min-height:46px;border:1px solid #dfc9ad;border-radius:10px;background:#fff7eb;color:#8a5b32;padding:10px;font-size:11px;font-weight:600}
 .queue-history-countdown{font-size:10px;color:var(--muted);white-space:nowrap}
 .payment-unpay{width:100%;min-height:46px;margin-top:18px;border:1px solid #b86f55;background:#fff3ed;color:#853e2b;border-radius:9px}
 .menu-tile{position:relative}
 .chef-app .menu-tile-minus{position:absolute;top:6px;left:6px;z-index:2;width:36px;min-height:36px;display:grid;place-items:center;padding:0;border:1px solid #ddc2a2;border-radius:7px;background:#fffaf2ed;color:#9f5729}
 .chef-app .menu-tile-minus:disabled{opacity:.35;cursor:default}
 .chef-app .menu-tile-face:disabled .tile-add-mark{opacity:.35}
+
+.queue-complete-control:disabled{opacity:.4;cursor:default}
+.queue-order-footer{display:flex;justify-content:flex-start;padding:0 16px 12px}
+.queue-parcel-label{display:inline-flex;border:1px solid #ddc6a8;border-radius:6px;background:#f3e6d5;color:#785333;padding:5px 9px;font-size:11px;font-weight:600}

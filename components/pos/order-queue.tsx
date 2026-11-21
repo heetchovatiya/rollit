@@ -92,7 +92,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
      </button>
      <button type="button" aria-label={`Record payment for order ${order.number}`} className={'queue-paid-control '+(order.paidAt?'is-paid':'')} disabled={locked} onClick={()=>{setError('');setCompletePayment(false);setPay(order)}}><CreditCard size={23}/><span>{order.paidAt?'Paid ✓':'Paid'}</span></button>
      {mode==='queue'&&!readonly&&<button type="button" className="queue-discard-control" aria-label={`Discard order ${order.number}`} disabled={locked} onClick={()=>confirmDiscard(order)}><Ban size={18}/>Discard</button>}
-     {mode==='queue'&&!readonly&&!(order.paidAt&&order.givenAt)&&<button type="button" className="queue-complete-control" disabled={locked} onClick={()=>{setError('');setCompletePayment(true);setPay(order)}}><Check size={18}/><span>Served and paid</span></button>}
+     {mode==='queue'&&!readonly&&<button type="button" className="queue-complete-control" disabled={locked||!!order.paidAt||!!order.givenAt} onClick={()=>{setError('');setCompletePayment(true);setPay(order)}}><span>Served and paid</span></button>}
     </div>}
    </div>
    {!removed&&!readonly&&(!order.completedAt||mode==='manage')&&<div className="queue-management">
@@ -115,6 +115,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
      <button className={order.paidAt?'done-action':'paid-action'} disabled={locked} onClick={()=>{setError('');setCompletePayment(false);setPay(order)}}><CreditCard size={19}/>{order.paidAt?'Paid ✓':'Paid'}</button>
     </div>}
    </div>}
+   {mode==='queue'&&order.orderType==='Takeaway'&&<div className="queue-order-footer"><span className="queue-parcel-label">Parcel</span></div>}
   </article>;
  }
  return <section className="order-queue">
