@@ -11,7 +11,7 @@ export function orderSummary(order:KitchenOrder){
  return names.join(' · ')+(order.items.length>3?` · +${order.items.length-3} more`:'');
 }
 
-export function inActiveQueue(order:KitchenOrder){return !order.hiddenAt&&!order.paidAt&&!order.cancelledAt&&!order.completedAt;}
+export function inActiveQueue(order:KitchenOrder){return !order.hiddenAt&&!order.cancelledAt&&!order.completedAt&&!(order.paidAt&&order.givenAt);}
 
 export function orderStatus(order:KitchenOrder):'Active'|'Served'|'Paid'|'Completed'|'Discarded'|'Deleted'{
  if(order.hiddenAt||order.deletedAt||order.events?.some(e=>e.action==='Deleted'))return 'Deleted';

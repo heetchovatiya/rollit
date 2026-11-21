@@ -19,6 +19,7 @@ type ChefData={products:MenuProduct[];orders:KitchenOrder[];settings:{menuOrder?
 export default function ChefPage(){
  const [page,S]=useState(0),[data,D]=useState<ChefData>({products:[],orders:[],settings:{businessName:'Roll-IT',defaultOrderType:'Dine-in',quickCustomers:['Walk-in customer'],quickKitchenNotes:['Less spicy','Spicy','No onion','No capsicum']}}),[busy,B]=useState(false),[loading,L]=useState(true),[error,E]=useState(''),[notice,N]=useState(''),[user,U]=useState<{username:string;name:string;role:string}|null>(null),[cart,A]=useState<Record<string,number>>({}),[customer,V]=useState('New'),[reference,R]=useState('1'),[notes,K]=useState(''),[customNote,CN]=useState(false),[customText,CT]=useState(''),[orderType,O]=useState<'Takeaway'|'Dine-in'|'Delivery'>('Dine-in'),[pending,P]=useState(false),[manageEntry,ME]=useState(0);
  useEffect(()=>{if(page===0)N('')},[page]);
+ useEffect(()=>{const applyView=()=>{const view=new URLSearchParams(window.location.search).get('view');S(view==='manage'?2:view==='queue'?1:0);};applyView();window.addEventListener('popstate',applyView);return()=>window.removeEventListener('popstate',applyView);},[]);
  const pendingAction=useRef<Extract<StoreAction,{type:'createOrder'}>|null>(null),requestVersion=useRef(0),swiped=useRef(false),usernameRef=useRef(''),mutation=useRef(false),defaulted=useRef(false);
  function clearPending(defaultType=data.settings.defaultOrderType){O("Dine-in");pendingAction.current=null;P(false);sessionStorage.removeItem('rollit-chef-pending');A({});V('New');R('1');K('');CN(false);CT('');}
  function accept(next:ChefData){D(next);if(!defaulted.current&&!pendingAction.current){O("Dine-in");defaulted.current=true;}const saved=pendingAction.current;if(saved&&next.orders.some(o=>o.id===saved.id)){clearPending(next.settings.defaultOrderType);S(1);N('Order placed.');}}
@@ -33,7 +34,7 @@ export default function ChefPage(){
  function remove(id:string){if(locked)return;A(old=>removeCartItem(old,id));N('')}
  async function place(){let a=pendingAction.current;if(!a){if(!selected.length)return;const items=selected.map(p=>({id:p.id,qty:cart[p.id],expectedPrice:p.price}));a={type:'createOrder',unlimited:true,id:crypto.randomUUID(),customer,orderReference:orderType==='Dine-in'?reference:'',notes:[notes,customText.trim()].filter(Boolean).join(', '),orderType,items,actor:usernameRef.current};pendingAction.current=a;P(true);sessionStorage.setItem('rollit-chef-pending',JSON.stringify({username:usernameRef.current,action:a}));}if(await action(a)){clearPending();S(1);N('Order placed.');}}
  const products=data.products.filter(p=>!p.archived);
- function navigate(next:number){if(next===2)ME(v=>v+1);S(Math.max(0,Math.min(2,next)));}
+ function navigate(next:number){const section=Math.max(0,Math.min(2,next));if(section===2)ME(v=>v+1);S(section);const url=new URL(window.location.href);url.searchParams.set('view',['new','queue','manage'][section]);window.history.replaceState(null,'',url.pathname+url.search+url.hash);}
  const pageRef=useRef(page);pageRef.current=page;
  useEffect(()=>{
   const tracker=createSwipeTracker();

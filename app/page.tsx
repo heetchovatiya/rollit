@@ -776,6 +776,7 @@ export default function Home() {
           )}
           {tab === "Users" && <UsersPanel/>}
           {tab === "Activity log" && <OrderActivity orders={data.orders||[]}/>}
+          {tab === "Orders" && <div className="admin-order-route-actions"><a href="/chef?view=new">Open order cart ↗</a><a href="/chef?view=queue">Chef queue ↗</a><a href="/chef?view=manage">Edit / delete orders (PIN) ↗</a></div>}
           {tab === "Orders" && <OrderQueue products={data.products} orders={data.orders||[]} busy={busy} onAction={async action=>!!await save(action)} onRefresh={load}/> }
           {tab === 'Calendar'&&<CalendarPanel data={data} selected={calendarDay} onDate={setCalendarDay} onReceipt={setReceipt} onNavigate={go}/>}
           {tab === 'Bills'&&<BillsPanel bills={data.bills} busy={busy||pending} onSave={async action=>{const state=await save(action);return {state,...(state?{}:saveFailure.current)};}}/>}
