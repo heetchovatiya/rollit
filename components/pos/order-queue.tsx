@@ -38,10 +38,10 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
  const allHistory=[...orders].sort((a,b)=>b.date.localeCompare(a.date));
  const history=allHistory.filter(order=>!inActiveQueue(order));
  const today=queueDayGroups(orders,tick);
- const rows=mode==='queue'?today.recent:mode==='manage'
+ const rows=mode==='queue'?today.current:mode==='manage'
   ?allHistory.filter(order=>historyFilter==='All'||orderStatus(order)===historyFilter)
   :showHistory?history:active;
- const count=mode==='queue'?today.recent.length+today.earlier.length:rows.length;
+ const count=mode==='queue'?today.current.length+today.history.length:rows.length;
  const locked=busy||working;
 
  async function act(action:StoreAction){
@@ -65,6 +65,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
   const status=orderStatus(order),progress=deliveryProgress(order),open=expanded===order.id;
   const minutes=Math.max(0,Math.floor((tick-Date.parse(order.date))/60000));
   const removed=!!order.cancelledAt||!!order.hiddenAt||!!order.deletedAt;
+  const readonly=mode==='queue'&&!inActiveQueue(order);
   const hasPayment=!!order.paidAt||!!order.paidTotal;
   return <article className={'queue-card order-status-'+status.toLowerCase()+' '+(open?'expanded':'')} key={order.id}>
    <div className="queue-card-heading">
@@ -82,7 +83,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
      <span className="order-amount"><strong>{money(order.total)}</strong><small><Clock size={12}/>{(mode!=='admin'||showHistory)?new Date(order.date).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}):`${minutes} min`}</small></span>
      {open?<ChevronUp size={19}/>:<ChevronDown size={19}/>}
     </button>
-    {!removed&&<div className="queue-row-actions">
+    {!removed&&!readonly&&<div className="queue-row-actions">
      <button type="button" role="checkbox" aria-checked={order.givenAt?true:progress.given>0?'mixed':false} aria-label={`${order.givenAt?'Undo served for':'Mark all items served in'} order ${order.number}`} title={order.givenAt?'Undo served status':'Mark every remaining item as served'} className={'queue-given-control '+(order.givenAt?'is-given':progress.given>0?'is-partial':'')} disabled={locked} onClick={()=>toggleServed(order)}>
       <span className="queue-given-box">{order.givenAt?<Check size={18}/>:progress.given>0?<Minus size={18}/>:null}</span><span>{order.givenAt?'Served':'Served all'}</span>
      </button>
@@ -90,7 +91,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
      {mode==='queue'&&inActiveQueue(order)&&!hasPayment&&<button type="button" className="queue-discard-control" aria-label={`Discard order ${order.number}`} disabled={locked} onClick={()=>confirmDiscard(order)}><Ban size={18}/>Discard</button>}
     </div>}
    </div>
-   {!removed&&!order.completedAt&&<div className="queue-management">
+   {!removed&&!readonly&&(!order.completedAt||mode==='manage')&&<div className="queue-management">
     <button type="button" disabled={locked} aria-label={`Edit order ${order.number}`} onClick={()=>{setError('');setEdit(order)}}><Pencil size={15}/>Add / edit items</button>
     {mode!=='queue'&&!hasPayment&&<>
      <button type="button" disabled={locked} aria-label={`Remove order ${order.number}`} onClick={()=>{setError('');setDiscard(false);setCancel(order)}}><Trash2 size={15}/>Delete</button>
@@ -100,12 +101,12 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
    {mode!=='queue'&&(hasPayment||!!order.cancelledAt)&&!order.hiddenAt&&<div className="queue-management"><button disabled={locked} aria-label={`Delete order ${order.number}`} onClick={()=>{setError('');setDiscard(false);setCancel(order)}}><Trash2 size={15}/>Delete order</button></div>}
    {open&&<div className="queue-card-body">
     <div className="queue-items">
-     {order.items.map(item=><div className="delivery-line" key={item.id}><div className="delivery-line-name"><b>{item.qty}×</b><span>{item.name}</span><strong>{money(item.qty*item.price)}</strong></div><DeliveryControls order={order} productId={item.id} locked={locked} onAction={act}/></div>)}
+     {order.items.map(item=><div className="delivery-line" key={item.id}><div className="delivery-line-name"><b>{item.qty}×</b><span>{item.name}</span><strong>{money(item.qty*item.price)}</strong></div><DeliveryControls order={order} productId={item.id} locked={locked} readOnly={readonly} onAction={act}/></div>)}
      {order.notes&&<p className="order-note"><b>Kitchen note</b>{order.notes}</p>}
      <small>Added by {order.createdBy||'Admin'} · {new Date(order.date).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}</small>
      {order.cancelReason&&<p>Cancelled: {order.cancelReason}</p>}
     </div>
-    {!removed&&<div className="order-actions">
+    {!removed&&!readonly&&<div className="order-actions">
      <button className={order.givenAt?'done-action':'given-action'} disabled={locked} onClick={()=>toggleServed(order)}><Check size={19}/>{order.givenAt?'Served ✓':progress.given>0?'Serve remaining':'Served all'}</button>
      <button className={order.paidAt?'done-action':'paid-action'} disabled={locked||!!order.paidAt} onClick={()=>setPay(order)}><CreditCard size={19}/>{order.paidAt?'Paid ✓':'Paid'}</button>
     </div>}
@@ -113,16 +114,27 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
   </article>;
  }
  return <section className="order-queue">
-  <div className="queue-toolbar"><div><span className="brand-eyebrow">THE PASS</span><h2>{mode==='manage'?'Full order history':mode==='queue'?"Today's orders":showHistory?'Order history':'Order queue'} <span className="queue-count">{count}</span></h2><p>{mode==='manage'?'All days, including discarded and deleted orders.':mode==='queue'?"Today's orders in India time. Last 2 hours below, earlier orders in the accordion.":showHistory?'Discarded, deleted and completed orders.':'Oldest first. Paid orders stay here until every item is served.'}</p></div><div className="queue-tools">
+  <div className="queue-toolbar"><div><span className="brand-eyebrow">THE PASS</span><h2>{mode==='manage'?'Full order history':mode==='queue'?'Order queue':showHistory?'Order history':'Order queue'} <span className="queue-count">{count}</span></h2><p>{mode==='manage'?'All days, including discarded and deleted orders.':mode==='queue'?"Current orders stay here until paid and served. Today's history is newest first.":showHistory?'Discarded, deleted and completed orders.':'Oldest first. Paid orders stay here until every item is served.'}</p></div><div className="queue-tools">
    {mode==='admin'&&<button onClick={()=>setShowHistory(!showHistory)}>{showHistory?'Back to queue':'History'}</button>}
    <button aria-label="Refresh queue" disabled={locked} onClick={()=>void onRefresh()}><RefreshCw size={18}/></button>
   </div></div>
   {mode==='manage'&&<div className="order-history-filters" role="group" aria-label="Order status filter">{['All','Active','Served','Paid','Completed','Discarded','Deleted'].map(status=><button type="button" key={status} aria-pressed={historyFilter===status} className={historyFilter===status?'selected':''} onClick={()=>setHistoryFilter(status)}>{status} <small>{status==='All'?orders.length:orders.filter(order=>orderStatus(order)===status).length}</small></button>)}</div>}
   {error&&<p role="alert" className="kitchen-error">{error}</p>}
-  {mode==='queue'&&<h3 className="queue-period-heading">Last 2 hours <small>{today.recent.length}</small></h3>}
-  <div className="queue-list">{rows.map(renderOrder)}</div>
-  {mode==='queue'&&today.earlier.length>0&&<details className="queue-earlier-orders"><summary>Earlier today <span>{today.earlier.length} orders</span></summary><div className="queue-list">{today.earlier.map(renderOrder)}</div></details>}
-  {!rows.length&&<div className="queue-empty"><Check size={34}/><h3>{mode==='queue'?today.earlier.length?'No orders in the last 2 hours.':'No orders today.':showHistory?'No past orders yet.':'All caught up.'}</h3><p>{mode==='queue'&&today.earlier.length?'Open Earlier today to view the rest.':'New orders will appear here as they come in.'}</p></div>}
+  {mode==='queue'?<>
+   <details className="queue-order-section" open>
+    <summary>Current orders <span>{today.current.length} orders</span></summary>
+    <div className="queue-list">{today.current.map(renderOrder)}</div>
+    {!today.current.length&&<div className="queue-empty"><Check size={34}/><h3>All caught up.</h3><p>Orders awaiting payment or serving appear here.</p></div>}
+   </details>
+   <details className="queue-order-section">
+    <summary>History <span>{today.history.length} orders today</span></summary>
+    <div className="queue-list">{today.history.map(renderOrder)}</div>
+    {!today.history.length&&<div className="queue-empty"><h3>No history today.</h3></div>}
+   </details>
+  </>:<>
+   <div className="queue-list">{rows.map(renderOrder)}</div>
+   {!rows.length&&<div className="queue-empty"><Check size={34}/><h3>{showHistory?'No past orders yet.':'All caught up.'}</h3><p>New orders will appear here as they come in.</p></div>}
+  </>}
   {edit&&<OrderEditor order={edit} products={products} busy={locked} error={error} onClose={()=>setEdit(null)} onSave={act}/>}
   {undoServed&&<Dialog label="Confirm undo served" onClose={()=>{if(!locked)setUndoServed(null)}}><div className="payment-dialog"><h2>Untick served for order #{undoServed.number}?</h2><p>All items will be marked unserved. A completed order will return to the active queue.</p><button className="brand-primary" disabled={locked} onClick={async()=>{if(await act({type:'orderUnserved',id:undoServed.id,originalRevision:undoServed.revision||0}))setUndoServed(null)}}>Yes, untick served</button><button type="button" disabled={locked} onClick={()=>setUndoServed(null)}>Keep served</button>{error&&<p role="alert" className="kitchen-error">{error}</p>}</div></Dialog>}
   {pay&&<Dialog label="Record payment" onClose={()=>{if(!locked)setPay(null)}}><div className="payment-dialog"><button className="dialog-x" disabled={locked} onClick={()=>setPay(null)} aria-label="Close payment"><X/></button><span className="brand-eyebrow">ORDER #{pay.number}</span><h2>How was it paid?</h2><p className="payment-total">{money(paymentDue(pay))}</p><p>{pay.paidTotal?`Already paid ${money(pay.paidTotal)}. Collect the remaining balance.`:'Choose the payment received.'}</p><div className="payment-choices"><button disabled={locked} onClick={async()=>{if(await act({type:'orderPaid',id:pay.id,payment:'UPI',originalRevision:pay.revision||0}))setPay(null)}}><CreditCard/><strong>Online</strong><small>UPI / online transfer</small></button><button disabled={locked} onClick={async()=>{if(await act({type:'orderPaid',id:pay.id,payment:'Cash',originalRevision:pay.revision||0}))setPay(null)}}><Banknote/><strong>Cash</strong><small>Cash received</small></button></div><small>This records payment received; it does not collect payment.</small>{error&&<p role="alert" className="kitchen-error">{error}</p>}</div></Dialog>}

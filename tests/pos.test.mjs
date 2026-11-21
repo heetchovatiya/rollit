@@ -961,7 +961,7 @@ test('undo served reopens completed orders and preserves their payment and stock
  s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
  s=applyAction(s,{type:'orderGiven',id:saleId});
  const sales=structuredClone(s.sales),stock=s.products[0].stock,paidAt=s.orders[0].paidAt;
- const undo=actionSchema.parse({type:'orderUnserved',id:saleId,originalRevision:s.orders[0].revision,actor:'chef.one'});
+ const undo=actionSchema.parse({type:'orderUnserved',manage:true,id:saleId,originalRevision:s.orders[0].revision,actor:'chef.one'});
  assert.throws(()=>applyAction(s,{...undo,originalRevision:0}),/changed/);
  s=applyAction(s,undo);
  assert.equal(s.orders[0].givenAt,undefined);
@@ -982,19 +982,50 @@ test('undo served rejects deleted and discarded orders',()=>{
  assert.throws(()=>applyAction(s,{type:'orderUnserved',id:saleId,originalRevision:s.orders[0].revision}),/discarded or deleted/);
 });
 const {queueDayGroups}=await import(pathToFileURL(join(temp,'delivery.mjs')));
-test('queue shows only the current India calendar day with an inclusive two-hour cutoff',()=>{
+test('queue keeps all pending orders current and today history newest first',()=>{
  const now=Date.parse('2026-11-21T10:00:00+05:30');
- const sample=(id,date)=>({id,date});
+ const sample=(id,date,extra={})=>({id,date,...extra});
+ const paidAt='2026-11-21T09:45:00+05:30',givenAt=paidAt;
+ const groups=queueDayGroups([
+  sample('old-pending','2026-11-20T23:59:59+05:30'),
+  sample('unpaid','2026-11-21T00:00:00+05:30',{givenAt}),
+  sample('unserved','2026-11-21T07:59:59+05:30',{paidAt}),
+  sample('both-pending','2026-11-21T08:00:00+05:30'),
+  sample('old-complete','2026-11-20T23:59:59+05:30',{paidAt,givenAt}),
+  sample('completed-first','2026-11-21T08:30:00+05:30',{paidAt,givenAt}),
+  sample('completed-last','2026-11-21T09:00:00+05:30',{paidAt,givenAt}),
+  sample('deleted','2026-11-21T09:30:00+05:30',{hiddenAt:paidAt}),
+  sample('discarded','2026-11-21T09:40:00+05:30',{cancelledAt:paidAt}),
+ ],now);
+ assert.deepEqual(groups.current.map(order=>order.id),['old-pending','unpaid','unserved','both-pending']);
+ assert.deepEqual(groups.history.map(order=>order.id),['discarded','deleted','completed-last','completed-first']);
+});
+test('queue history follows India midnight and sorts by timestamps across offsets',()=>{
+ const sample=(id,date)=>({id,date,paidAt:date,givenAt:date});
  const groups=queueDayGroups([
   sample('yesterday','2026-11-20T23:59:59+05:30'),
   sample('midnight','2026-11-21T00:00:00+05:30'),
-  sample('older','2026-11-21T07:59:59+05:30'),
-  sample('cutoff','2026-11-21T08:00:00+05:30'),
-  sample('recent','2026-11-21T09:00:00+05:30'),
-  sample('completed','2026-11-21T09:30:00+05:30'),
- ],now);
- assert.deepEqual(groups.recent.map(order=>order.id),['cutoff','recent','completed']);
- assert.deepEqual(groups.earlier.map(order=>order.id),['midnight','older']);
- const midnight=queueDayGroups([sample('yesterday','2026-11-20T23:59:59+05:30'),sample('today','2026-11-21T00:00:00+05:30')],Date.parse('2026-11-21T00:30:00+05:30'));
- assert.deepEqual(midnight.recent.map(order=>order.id),['today']);
+  sample('utc-later','2026-11-20T18:45:00Z'),
+ ],Date.parse('2026-11-21T00:30:00+05:30'));
+ assert.deepEqual(groups.history.map(order=>order.id),['utc-later','midnight']);
+ assert.deepEqual(groups.current,[]);
+});
+
+test('completed order edits require Manage orders and extra items reopen the order',()=>{
+ let s=applyAction(normalizeState(state()),orderAction());
+ s=applyAction(s,{type:'orderGiven',id:saleId});
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ const edit=editKitchen(s.orders[0],{notes:'Managed edit'});
+ assert.throws(()=>applyAction(s,edit),/Manage orders/);
+ assert.throws(()=>applyAction(s,{type:'orderUnserved',id:saleId,originalRevision:s.orders[0].revision}),/Manage orders/);
+ const sales=structuredClone(s.sales);
+ s=applyAction(s,{...edit,manage:true});
+ assert.equal(s.orders[0].notes,'Managed edit');
+ assert.ok(s.orders[0].completedAt);
+ s=applyAction(s,editKitchen(s.orders[0],{manage:true,items:[{id:pId,qty:3,expectedPrice:5000}]}));
+ assert.equal(inActiveQueue(s.orders[0]),true);
+ assert.equal(s.orders[0].completedAt,undefined);
+ assert.equal(s.orders[0].paidAt,undefined);
+ assert.equal(s.orders[0].givenAt,undefined);
+ assert.deepEqual(s.sales,sales);
 });

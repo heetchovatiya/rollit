@@ -32,7 +32,8 @@ export default {
     if(['cancelOrder','archiveOrder'].includes(action)&&!await validManage(request,env,user))return Response.json({error:'Enter the Manage orders PIN again.'},{status:403,headers});
     if(!mayChefAccess(path,request.method,action))return Response.json({error:'Admin access required.'},{status:403,headers});
    }
-   const trusted=new Headers(request.headers);trusted.delete('x-rollit-user');trusted.delete('x-rollit-role');
+   const manageUnlocked=user?.role==='admin'||(user?.role==='chef'&&!!request.headers.get('X-Order-Manage-Token')&&await validManage(request,env,user));
+   const trusted=new Headers(request.headers);trusted.delete('x-rollit-user');trusted.delete('x-rollit-role');trusted.delete('x-rollit-manage');if(manageUnlocked)trusted.set('x-rollit-manage','1');
    if(user){trusted.set('x-rollit-user',user.username);trusted.set('x-rollit-role',user.role);}
    request=new Request(request,{headers:trusted});
    const response=(publicAsset||path.startsWith('/ocr/'))?await env.ASSETS.fetch(request):await app.fetch(request,env,ctx);

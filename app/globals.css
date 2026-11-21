@@ -3360,11 +3360,9 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 .order-payment-choice{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:14px}
 .order-payment-choice select{min-height:40px;max-width:210px;font-size:12px}
 
-.queue-period-heading{font-size:15px;display:flex;gap:10px;align-items:center;margin:20px 0 12px}
-.queue-period-heading small{font-size:12px;color:var(--muted)}
-.queue-earlier-orders{margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
-.queue-earlier-orders>summary{cursor:pointer;padding:14px 4px;font-weight:600}
-.queue-earlier-orders>summary>span{font-size:12px;font-weight:400;margin-left:12px;color:var(--muted)}
-.queue-earlier-orders>.queue-list{margin-top:12px}
+.queue-order-section{margin-top:22px;border-top:1px solid var(--line);padding-top:12px}
+.queue-order-section>summary{cursor:pointer;padding:14px 4px;font-weight:600}
+.queue-order-section>summary>span{font-size:12px;font-weight:400;margin-left:12px;color:var(--muted)}
+.queue-order-section>.queue-list{margin-top:12px}
 .order-confirm-items{display:grid;gap:12px;max-height:240px;overflow-y:auto;margin:20px 0}
 .order-confirm-items>div{display:flex;justify-content:space-between;gap:20px;font-size:14px}

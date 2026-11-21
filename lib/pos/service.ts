@@ -133,7 +133,8 @@ export function applyAction(
   } else if(action.type==="editOrder") {
     const order=state.orders?.find(o=>o.id===action.id);
     if(!order)throw new StoreError("Order not found.",404);
-    if(order.completedAt||order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("Only active orders can be edited.");
+    if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("Discarded or deleted orders cannot be edited.");
+    if((order.completedAt||(order.paidAt&&order.givenAt))&&!action.manage)throw new StoreError("Edit history orders in Manage orders.",403);
     const same=order.customer===(action.customer||"Walk-in customer")&&order.notes===action.notes&&order.orderType===action.orderType&&order.orderReference===action.orderReference&&order.items.length===action.items.length&&action.items.every(i=>order.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice));
     if(same)return current;
     if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed on another device. Refresh and reopen the editor.");
@@ -172,11 +173,12 @@ export function applyAction(
     else if(order.paidTotal!==undefined)order.paidAt=order.paidAt||now;
     event(order,"Edited",action.actor,`${previous} → ${items.map(i=>`${i.qty}× ${i.name}`).join(" · ")}${changesMetadata.length?"; updated "+changesMetadata.join(", "):""}`);
     if(items.every(i=>order.delivered![i.id]===i.qty))order.givenAt=order.givenAt||now;else delete order.givenAt;
-    if(order.givenAt&&order.paidAt)order.completedAt=now;
+    if(order.givenAt&&order.paidAt)order.completedAt=order.completedAt||now;else delete order.completedAt;
   } else if(action.type==="orderUnserved") {
     const order=state.orders?.find(o=>o.id===action.id);
     if(!order)throw new StoreError("Order not found.",404);
     if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("This order was discarded or deleted.");
+    if((order.completedAt||(order.paidAt&&order.givenAt))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
     if(!order.givenAt&&deliveryProgress(order).given===0)return current;
     if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed. Refresh before undoing served.");
     order.delivered=Object.fromEntries(order.items.map(item=>[item.id,0]));

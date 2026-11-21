@@ -29,7 +29,9 @@ export function paymentDue(order:KitchenOrder){return Math.max(0,order.total-(or
 
 export function queueDayGroups(orders:KitchenOrder[],now=Date.now()){
  const today=businessDay(now);
- const rows=orders.filter(order=>businessDay(order.date)===today).sort((a,b)=>a.date.localeCompare(b.date));
- const cutoff=now-2*60*60*1000;
- return {recent:rows.filter(order=>Date.parse(order.date)>=cutoff),earlier:rows.filter(order=>Date.parse(order.date)<cutoff)};
+ return {
+  current:orders.filter(inActiveQueue).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date)),
+  history:orders.filter(order=>!inActiveQueue(order)&&businessDay(order.date)===today)
+   .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)),
+ };
 }

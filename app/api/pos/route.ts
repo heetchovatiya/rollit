@@ -39,6 +39,7 @@ export async function POST(request: Request) {
     }
     if (!env.DB) throw new Error("Database unavailable");
     const action = parsed.data;
+    if(action.type==="editOrder"||action.type==="orderUnserved")action.manage=request.headers.get("x-rollit-manage")==="1";
     if(action.type==="createOrder"||action.type==="editOrder"||action.type==="cancelOrder"||action.type==="discardOrder"||action.type==="archiveOrder"||action.type==="orderGiven"||action.type==="orderUnserved"||action.type==="orderDelivery"||action.type==="orderPaid")action.actor=request.headers.get("x-rollit-user")||"Admin";
     const attachment =
       action.type === "product"
