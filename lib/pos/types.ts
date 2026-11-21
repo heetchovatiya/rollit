@@ -15,6 +15,7 @@ export interface Product {
   billIds?: string[];
 }
 export interface SaleItem {
+  extraPrice?: number;
   notes?: string;
   ingredientUsage?: {ingredientId:string;qty:number;unitCost:number}[];
   id: string;

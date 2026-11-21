@@ -1141,3 +1141,33 @@ test('per-item instructions stay separate and validate their length',()=>{
  assert.deepEqual(s.orders[0].items.map(item=>item.notes),['No onion','Spicy']);
  assert.equal(actionSchema.safeParse({...action,items:[{...action.items[0],notes:'x'.repeat(241)}]}).success,false);
 });
+
+test('per-item extras are included once per unit and survive edits, retries and payment',()=>{
+ const action=actionSchema.parse({...orderAction(),items:[{id:pId,qty:2,expectedPrice:5000,extraPrice:1000,notes:'Extra sauce'}]});
+ let s=applyAction(normalizeState(state()),action);
+ assert.equal(s.orders[0].items[0].price,6000);
+ assert.equal(s.orders[0].items[0].extraPrice,1000);
+ assert.equal(s.orders[0].total,12000);
+ assert.equal(s.products[0].stock,8);
+ assert.strictEqual(applyAction(s,action),s);
+ assert.throws(()=>applyAction(s,{...action,items:[{...action.items[0],extraPrice:2000}]}),/already used/);
+ s=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:3,expectedPrice:6000}]}));
+ assert.equal(s.orders[0].items[0].extraPrice,1000);
+ assert.equal(s.orders[0].items[0].notes,'Extra sauce');
+ assert.equal(s.orders[0].total,18000);
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ assert.equal(s.sales[0].total,18000);
+ assert.equal(s.sales[0].items[0].price,6000);
+ assert.equal(s.sales[0].items[0].extraPrice,1000);
+ assert.equal(s.products[0].price,5000);
+});
+test('extras support ten or twenty rupees without changing other items or accepting invalid charges',()=>{
+ const initial=normalizeState(state());
+ initial.products.push({...initial.products[0],id:secondId,name:'Second roll'});
+ const action=actionSchema.parse({...orderAction(),items:[{id:pId,qty:1,expectedPrice:5000,extraPrice:2000},{id:secondId,qty:1,expectedPrice:5000}]});
+ const s=applyAction(initial,action);
+ assert.equal(s.orders[0].total,12000);
+ assert.deepEqual(s.orders[0].items.map(item=>item.price),[7000,5000]);
+ for(const extraPrice of [-1000,500,3000,10.5])assert.equal(actionSchema.safeParse({...action,items:[{...action.items[0],extraPrice}]}).success,false);
+ assert.throws(()=>applyAction(initial,{...action,items:[{...action.items[0],expectedPrice:4000}]}),/Price changed/);
+});

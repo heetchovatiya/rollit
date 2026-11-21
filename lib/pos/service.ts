@@ -105,7 +105,7 @@ export function applyAction(
     state.orders ||= [];
     const prior=state.orders.find(o=>o.id===action.id);
     if(prior){
-      if((action.payment&&prior.payment!==action.payment)||prior.customer!==(action.customer||"Walk-in customer") || prior.notes!==action.notes || prior.orderType!==action.orderType || prior.orderReference!==action.orderReference || prior.createdBy!==action.actor || prior.items.length!==action.items.length || !action.items.every(i=>prior.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice&&(p.notes||"")===(i.notes||"")))) throw new StoreError("This order reference is already used. Refresh to check the queue.");
+      if((action.payment&&prior.payment!==action.payment)||prior.customer!==(action.customer||"Walk-in customer") || prior.notes!==action.notes || prior.orderType!==action.orderType || prior.orderReference!==action.orderReference || prior.createdBy!==action.actor || prior.items.length!==action.items.length || !action.items.every(i=>prior.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice+(i.extraPrice||0)&&(p.extraPrice||0)===(i.extraPrice||0)&&(p.notes||"")===(i.notes||"")))) throw new StoreError("This order reference is already used. Refresh to check the queue.");
       return current;
     }
     if(state.sales.some(s=>s.id===action.id))throw new StoreError("This reference is already used by a sale.");
@@ -118,8 +118,8 @@ export function applyAction(
       if(!p||p.archived)throw new StoreError("An item is unavailable. Refresh your menu.");
       if(p.price!==item.expectedPrice)throw new StoreError(`Price changed for ${p.name}. Refresh your menu.`);
       if(action.unlimited===false&&availableUnits(state,p)<item.qty)throw new StoreError(`Only ${availableUnits(state,p)} units of ${p.name} remain.`);
-      const snapshot={id:p.id,name:p.name,notes:item.notes||"",qty:item.qty,price:p.price,cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??(order.rawInventoryOnly?[]:undefined)};ingredients(snapshot,-item.qty,"Order reserved",order.id,order.rawInventoryOnly);
-      order.items.push(snapshot);order.total+=p.price*item.qty;
+      const snapshot={id:p.id,name:p.name,notes:item.notes||"",extraPrice:item.extraPrice||0,qty:item.qty,price:p.price+(item.extraPrice||0),cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??(order.rawInventoryOnly?[]:undefined)};ingredients(snapshot,-item.qty,"Order reserved",order.id,order.rawInventoryOnly);
+      order.items.push(snapshot);order.total+=snapshot.price*item.qty;
       move(p,-item.qty,"Order",`Reserved for order #${order.number}`,order.id);
     }
     if(!Number.isSafeInteger(order.total)||order.total>999999999)throw new StoreError("Order total is too large.",400);

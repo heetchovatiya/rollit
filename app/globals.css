@@ -3399,3 +3399,8 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 
 .edit-order-lines>div:has(>.item-customization){flex-wrap:wrap}
 .edit-order-lines>div>.item-customization{flex-basis:100%}
+
+.item-extra-options{display:grid;gap:8px;font-size:11px;color:#73543a}
+.item-extra-options>div{display:flex;gap:7px;flex-wrap:wrap}
+.item-extra-options button{min-height:38px;padding:8px 10px;border:1px solid #e0d2be;border-radius:7px;background:#fffdfa;color:#73543a;font-size:12px}
+.item-extra-options button.quick-picked{background:#ebd0ad;border-color:#b77443;color:#59371e}

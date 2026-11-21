@@ -107,7 +107,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
    {mode!=='queue'&&(hasPayment||!!order.cancelledAt)&&!order.hiddenAt&&<div className="queue-management"><button disabled={locked} aria-label={`Delete order ${order.number}`} onClick={()=>{setError('');setDiscard(false);setCancel(order)}}><Trash2 size={15}/>Delete order</button></div>}
    {open&&<div className="queue-card-body">
     <div className="queue-items">
-     {order.items.map(item=><div className="delivery-line" key={item.id}><div className="delivery-line-name"><b>{item.qty}×</b><span>{item.name}</span><strong>{money(item.qty*item.price)}</strong></div>{item.notes&&<p className="queue-item-note">{item.notes}</p>}<DeliveryControls order={order} productId={item.id} locked={locked} readOnly={readonly} onAction={act}/></div>)}
+     {order.items.map(item=><div className="delivery-line" key={item.id}><div className="delivery-line-name"><b>{item.qty}×</b><span>{item.name}</span><strong>{money(item.qty*item.price)}</strong></div>{item.notes&&<p className="queue-item-note">{item.notes}</p>}{!!item.extraPrice&&<small className="queue-item-note">Includes {money(item.extraPrice)} extra per item</small>}<DeliveryControls order={order} productId={item.id} locked={locked} readOnly={readonly} onAction={act}/></div>)}
      {order.notes&&<p className="order-note"><b>Kitchen note</b>{order.notes}</p>}
      <small>Added by {order.createdBy||'Admin'} · {new Date(order.date).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}</small>
      {order.cancelReason&&<p>Cancelled: {order.cancelReason}</p>}
