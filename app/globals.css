@@ -3404,3 +3404,6 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 .item-extra-options>div{display:flex;gap:7px;flex-wrap:wrap}
 .item-extra-options button{min-height:38px;padding:8px 10px;border:1px solid #e0d2be;border-radius:7px;background:#fffdfa;color:#73543a;font-size:12px}
 .item-extra-options button.quick-picked{background:#ebd0ad;border-color:#b77443;color:#59371e}
+
+.chef-v2 .chef-order-fields{position:static;top:auto;overflow:visible;background:#efe2cf;border-bottom:2px solid #cfb99b;padding:16px 13px;margin-bottom:4px}
+.chef-v2 .chef-order-fields .order-tap-group>span,.chef-v2 .chef-order-fields .quick-choices>span{color:#6b5039}
