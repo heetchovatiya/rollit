@@ -806,18 +806,18 @@ test('order edits add or remove lines, preserve quoted prices and reject insuffi
  assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{items:[{id:secondId,qty:20,expectedPrice:7000}]})),/stock/);
  assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{items:[{id:secondId,qty:3,expectedPrice:1}]})),/price changed/);
 });
-test('delivery changes invalidate old editors, given quantities cannot be removed, and paid orders leave the queue',()=>{
+test('delivery changes invalidate old editors, given quantities cannot be removed, and paid orders wait for serving',()=>{
  let s=applyAction(normalizeState(state()),orderAction());const stale=editKitchen(s.orders[0],{notes:'Stale edit'});
  s=applyAction(s,{type:'orderDelivery',id:saleId,productId:pId,deliveredQty:1,expectedDelivered:0});assert.throws(()=>applyAction(s,stale),/another device/);
  assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:0,expectedPrice:5000}]})),/already served/);
  const trimmed=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:1,expectedPrice:5000}]}));assert.ok(trimmed.orders[0].givenAt);assert.equal(trimmed.products[0].stock,9);
- assert.equal(inActiveQueue(s.orders[0]),true);s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});assert.equal(inActiveQueue(s.orders[0]),false);assert.equal(s.orders[0].completedAt,undefined);
+ assert.equal(inActiveQueue(s.orders[0]),true);s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});assert.equal(inActiveQueue(s.orders[0]),true);assert.equal(s.orders[0].completedAt,undefined);s=applyAction(s,{type:'orderGiven',id:saleId});assert.equal(inActiveQueue(s.orders[0]),false);
  assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{notes:'Cannot change paid order'})),/Only unpaid/);assert.throws(()=>applyAction(s,{type:'cancelOrder',id:saleId,reason:'Remove paid'}),/Paid orders/);
 });
 test('concurrent edit and payment produce one consistent immutable sale',async()=>{
  const {db}=await seeded();let s=await commitAction(db,orderAction());const edit=editKitchen(s.orders[0],{items:[{id:pId,qty:3,expectedPrice:5000}]});
  await Promise.allSettled([commitAction(db,edit),commitAction(db,{type:'orderPaid',id:saleId,payment:'UPI'})]);
- s=await readState(db);assert.equal(s.sales.length,1);assert.equal(s.sales[0].total,s.orders[0].total);assert.equal(s.products[0].stock,10-s.orders[0].items[0].qty);assert.equal(inActiveQueue(s.orders[0]),false);
+ s=await readState(db);assert.equal(s.sales.length,1);assert.equal(s.sales[0].total,s.orders[0].total);assert.equal(s.products[0].stock,10-s.orders[0].items[0].qty);assert.equal(inActiveQueue(s.orders[0]),true);
 });
 
 const {availableUnits,projectState,inferPack}=await import(pathToFileURL(join(temp,'recipes.mjs')));
@@ -870,8 +870,8 @@ test('paid order deletion keeps activity and financial records without a reason'
 
 const {changeCart,removeCartItem}=await import(pathToFileURL(join(temp,'cart.mjs')));
 const {menuArtCell}=await import(pathToFileURL(join(temp,'menu-images.mjs')));
-test('cart follows tap order rather than menu order and re-added items append at the bottom',()=>{
- let cart={};cart=changeCart(cart,secondId,1);cart=changeCart(cart,pId,1);cart=changeCart(cart,saleId,1);assert.deepEqual(Object.keys(cart),[secondId,pId,saleId]);cart=changeCart(cart,secondId,1);assert.deepEqual(Object.keys(cart),[secondId,pId,saleId]);assert.equal(cart[secondId],2);const original=structuredClone(cart);cart=removeCartItem(cart,pId);assert.deepEqual(original,{[secondId]:2,[pId]:1,[saleId]:1});cart=changeCart(cart,pId,1);assert.deepEqual(Object.keys(cart),[secondId,saleId,pId]);cart=changeCart(cart,pId,-1);assert.equal(pId in cart,false);assert.deepEqual(changeCart({},pId,-1),{});
+test('cart shows latest added items first, reductions preserve position, and deleted items can be re-added',()=>{
+ let cart={};cart=changeCart(cart,secondId,1);cart=changeCart(cart,pId,1);cart=changeCart(cart,saleId,1);assert.deepEqual(Object.keys(cart),[saleId,pId,secondId]);cart=changeCart(cart,secondId,1);assert.deepEqual(Object.keys(cart),[secondId,saleId,pId]);assert.equal(cart[secondId],2);cart=changeCart(cart,secondId,-1);assert.deepEqual(Object.keys(cart),[secondId,saleId,pId]);const original=structuredClone(cart);cart=removeCartItem(cart,pId);assert.equal(pId in original,true);cart=changeCart(cart,pId,1);assert.deepEqual(Object.keys(cart),[pId,secondId,saleId]);cart=changeCart(cart,pId,-1);assert.equal(pId in cart,false);assert.deepEqual(changeCart({},pId,-1),{});
 });
 test('food and water tiles each select their correct illustration',()=>{
  const names=['Crispy Veg Kathi Roll','Classic Paneer Kathi Roll','Magic Mushroom Kathi Roll','Salted Fries','Peri Peri Fries','Cheesy Peri Peri Fries','Loaded Fries','Water Bottle Small','Water Bottle Big'];assert.deepEqual(names.map(menuArtCell),[[0,0],[1,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]]);
