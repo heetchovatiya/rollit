@@ -3379,3 +3379,23 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 .queue-complete-control:disabled{opacity:.4;cursor:default}
 .queue-order-footer{display:flex;justify-content:flex-start;padding:0 16px 12px}
 .queue-parcel-label{display:inline-flex;border:1px solid #ddc6a8;border-radius:6px;background:#f3e6d5;color:#785333;padding:5px 9px;font-size:11px;font-weight:600}
+
+/* Order details and customized items share one scrolling ticket. */
+.chef-v2 .chef-cart{height:calc(100dvh - 110px);max-height:calc(100dvh - 110px);min-height:0}
+.chef-v2 .chef-cart-body{display:block;flex:1;min-height:0;overflow-y:auto;overscroll-behavior-y:contain;overflow-anchor:none}
+.chef-v2 .chef-cart-items{height:auto;max-height:none;overflow:visible;overscroll-behavior-y:auto}
+.chef-v2 .chef-order-fields{max-height:none;overflow:visible}
+.chef-v2 .chef-cart-line{display:grid;grid-template-columns:minmax(0,1fr) auto;align-items:start}
+.item-customization{grid-column:1/-1;min-width:0}
+.item-custom-button{display:inline-flex;gap:6px;align-items:center;border:1px solid #e0d2be;border-radius:7px;background:#f5ebdd;color:#73543a;min-height:36px;padding:7px 10px;font-size:11px}
+.item-custom-button.quick-picked{background:#ebd0ad;border-color:#b77443;color:#59371e}
+.item-custom-summary{display:block;margin-top:7px;overflow-wrap:anywhere}
+.item-custom-dropdown{margin-top:8px;padding:12px;border:1px solid #e0d2be;border-radius:9px;background:#fff8ed;display:grid;gap:12px}
+.item-custom-dropdown label{display:grid;gap:6px}
+.item-custom-dropdown textarea{width:100%;min-height:65px;resize:vertical;font:inherit;font-size:12px;padding:9px;border:1px solid #e0d2be;border-radius:7px;background:#fffdfa}
+.item-custom-dropdown>button{justify-self:end;min-height:36px;font-size:12px}
+.queue-item-note{margin:6px 0;color:#9b6134;font-size:12px;overflow-wrap:anywhere}
+.order-confirm-items>div>span>small{display:block;margin-top:5px;font-size:11px;overflow-wrap:anywhere}
+
+.edit-order-lines>div:has(>.item-customization){flex-wrap:wrap}
+.edit-order-lines>div>.item-customization{flex-basis:100%}

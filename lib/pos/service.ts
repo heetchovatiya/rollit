@@ -105,7 +105,7 @@ export function applyAction(
     state.orders ||= [];
     const prior=state.orders.find(o=>o.id===action.id);
     if(prior){
-      if((action.payment&&prior.payment!==action.payment)||prior.customer!==(action.customer||"Walk-in customer") || prior.notes!==action.notes || prior.orderType!==action.orderType || prior.orderReference!==action.orderReference || prior.createdBy!==action.actor || prior.items.length!==action.items.length || !action.items.every(i=>prior.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice))) throw new StoreError("This order reference is already used. Refresh to check the queue.");
+      if((action.payment&&prior.payment!==action.payment)||prior.customer!==(action.customer||"Walk-in customer") || prior.notes!==action.notes || prior.orderType!==action.orderType || prior.orderReference!==action.orderReference || prior.createdBy!==action.actor || prior.items.length!==action.items.length || !action.items.every(i=>prior.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice&&(p.notes||"")===(i.notes||"")))) throw new StoreError("This order reference is already used. Refresh to check the queue.");
       return current;
     }
     if(state.sales.some(s=>s.id===action.id))throw new StoreError("This reference is already used by a sale.");
@@ -118,7 +118,7 @@ export function applyAction(
       if(!p||p.archived)throw new StoreError("An item is unavailable. Refresh your menu.");
       if(p.price!==item.expectedPrice)throw new StoreError(`Price changed for ${p.name}. Refresh your menu.`);
       if(action.unlimited===false&&availableUnits(state,p)<item.qty)throw new StoreError(`Only ${availableUnits(state,p)} units of ${p.name} remain.`);
-      const snapshot={id:p.id,name:p.name,qty:item.qty,price:p.price,cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??(order.rawInventoryOnly?[]:undefined)};ingredients(snapshot,-item.qty,"Order reserved",order.id,order.rawInventoryOnly);
+      const snapshot={id:p.id,name:p.name,notes:item.notes||"",qty:item.qty,price:p.price,cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??(order.rawInventoryOnly?[]:undefined)};ingredients(snapshot,-item.qty,"Order reserved",order.id,order.rawInventoryOnly);
       order.items.push(snapshot);order.total+=p.price*item.qty;
       move(p,-item.qty,"Order",`Reserved for order #${order.number}`,order.id);
     }
@@ -136,11 +136,11 @@ export function applyAction(
     if(!order)throw new StoreError("Order not found.",404);
     if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("Discarded or deleted orders cannot be edited.");
     if((order.completedAt||(order.paidAt&&order.givenAt))&&!action.manage)throw new StoreError("Edit history orders in Manage orders.",403);
-    const same=order.customer===(action.customer||"Walk-in customer")&&order.notes===action.notes&&order.orderType===action.orderType&&order.orderReference===action.orderReference&&order.items.length===action.items.length&&action.items.every(i=>order.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice));
+    const same=order.customer===(action.customer||"Walk-in customer")&&order.notes===action.notes&&order.orderType===action.orderType&&order.orderReference===action.orderReference&&order.items.length===action.items.length&&action.items.every(i=>order.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice&&(i.notes===undefined||(p.notes||"")===i.notes)));
     if(same)return current;
     if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed on another device. Refresh and reopen the editor.");
     const previous=order.items.map(i=>`${i.qty}× ${i.name}`).join(" · ");
-    const changesMetadata=[order.customer!==(action.customer||"Walk-in customer")?"customer":null,order.notes!==action.notes?"notes":null,order.orderType!==action.orderType?"order type":null,order.orderReference!==action.orderReference?"table":null].filter(Boolean);
+    const changesMetadata=[order.customer!==(action.customer||"Walk-in customer")?"customer":null,order.notes!==action.notes||action.items.some(item=>item.notes!==undefined&&item.notes!==(order.items.find(old=>old.id===item.id)?.notes||""))?"notes":null,order.orderType!==action.orderType?"order type":null,order.orderReference!==action.orderReference?"table":null].filter(Boolean);
     const seen=new Set<string>(),items:import("./types").SaleItem[]=[];
     for(const item of action.items){
       if(seen.has(item.id))throw new StoreError("A product appears twice.",400);seen.add(item.id);
@@ -150,7 +150,7 @@ export function applyAction(
       if(item.qty<deliveredQuantity(order,item.id))throw new StoreError("Quantity cannot be lower than the number already served.");
       const price=prior?.price??p.price;
       if(item.expectedPrice!==price)throw new StoreError("An item price changed. Refresh and reopen the editor.");
-      items.push(prior?{...prior,qty:item.qty}:{id:p.id,name:p.name,qty:item.qty,price:p.price,cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??((action.unlimited||order.rawInventoryOnly)?[]:undefined)});
+      items.push(prior?{...prior,qty:item.qty,notes:item.notes??prior.notes}:{id:p.id,name:p.name,notes:item.notes||"",qty:item.qty,price:p.price,cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??((action.unlimited||order.rawInventoryOnly)?[]:undefined)});
     }
     for(const old of order.items){
       if(!seen.has(old.id)&&paidQuantity(order,old.id)>0)throw new StoreError("An already-paid item cannot be removed.");

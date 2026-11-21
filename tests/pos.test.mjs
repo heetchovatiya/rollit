@@ -1117,3 +1117,27 @@ test('history payment corrections remain restricted to Manage orders after the g
  s=applyAction(s,{...correction,manage:true},later);
  assert.equal(s.sales.length,0);
 });
+
+test('item customizations survive order placement, retries, edits, and payment snapshots',()=>{
+ const action=actionSchema.parse({...orderAction(),items:[{id:pId,qty:2,expectedPrice:5000,notes:'Less spicy, No onion'}]});
+ let s=applyAction(normalizeState(state()),action);
+ assert.equal(s.orders[0].items[0].notes,'Less spicy, No onion');
+ assert.strictEqual(applyAction(s,action),s);
+ assert.throws(()=>applyAction(s,{...action,items:[{...action.items[0],notes:'Spicy'}]}),/already used/);
+ s=applyAction(s,editKitchen(s.orders[0],{notes:'Old client changes the order note'}));
+ assert.equal(s.orders[0].items[0].notes,'Less spicy, No onion');
+ s=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:2,expectedPrice:5000,notes:'Spicy, Extra sauce'}]}));
+ assert.equal(s.orders[0].items[0].notes,'Spicy, Extra sauce');
+ assert.equal(s.products[0].stock,8);
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ assert.equal(s.sales[0].items[0].notes,'Spicy, Extra sauce');
+ assert.equal(s.sales[0].total,10000);
+});
+test('per-item instructions stay separate and validate their length',()=>{
+ const initial=normalizeState(state());
+ initial.products.push({...initial.products[0],id:secondId,name:'Second roll'});
+ const action=actionSchema.parse({...orderAction(),items:[{id:pId,qty:1,expectedPrice:5000,notes:'No onion'},{id:secondId,qty:1,expectedPrice:5000,notes:'Spicy'}]});
+ const s=applyAction(initial,action);
+ assert.deepEqual(s.orders[0].items.map(item=>item.notes),['No onion','Spicy']);
+ assert.equal(actionSchema.safeParse({...action,items:[{...action.items[0],notes:'x'.repeat(241)}]}).success,false);
+});

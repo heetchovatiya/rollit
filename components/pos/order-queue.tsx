@@ -9,7 +9,8 @@ import {deliveryProgress,orderSummary,inActiveQueue,orderStatus,paymentDue,queue
 import {OrderEditor,type QueueProduct} from './order-editor';
 import {Dialog} from './dialog';
 
-export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="admin"}:{
+export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptions=[],mode="admin"}:{
+ noteOptions?:string[];
  mode?:"admin"|"queue"|"manage";
  products?:QueueProduct[];
  orders:KitchenOrder[];
@@ -77,6 +78,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
       <strong className="queue-item-summary" title={order.items.map(item=>`${item.qty}× ${item.name}`).join(', ')}>{orderSummary(order)}</strong>
       <small>{order.customer} · {order.orderType==='Dine-in'?`Dine-in${order.orderReference?' · Table '+order.orderReference:''}`:order.orderType==='Takeaway'?'Parcel':order.orderType} · {progress.given}/{progress.total} served</small>
       {order.notes&&<span className="queue-collapsed-note">{order.notes}</span>}
+      {order.items.some(item=>item.notes)&&<span className="queue-collapsed-note">{order.items.filter(item=>item.notes).map(item=>`${item.name}: ${item.notes}`).join(' · ')}</span>}
      </span>
      <span className="queue-badges">
       <span className={order.givenAt?'status-done':'status-wait'}>{['Deleted','Discarded','Completed'].includes(status)?status:order.givenAt?'Served':progress.given>0?'Partly served':'Preparing'}</span>
@@ -105,7 +107,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
    {mode!=='queue'&&(hasPayment||!!order.cancelledAt)&&!order.hiddenAt&&<div className="queue-management"><button disabled={locked} aria-label={`Delete order ${order.number}`} onClick={()=>{setError('');setDiscard(false);setCancel(order)}}><Trash2 size={15}/>Delete order</button></div>}
    {open&&<div className="queue-card-body">
     <div className="queue-items">
-     {order.items.map(item=><div className="delivery-line" key={item.id}><div className="delivery-line-name"><b>{item.qty}×</b><span>{item.name}</span><strong>{money(item.qty*item.price)}</strong></div><DeliveryControls order={order} productId={item.id} locked={locked} readOnly={readonly} onAction={act}/></div>)}
+     {order.items.map(item=><div className="delivery-line" key={item.id}><div className="delivery-line-name"><b>{item.qty}×</b><span>{item.name}</span><strong>{money(item.qty*item.price)}</strong></div>{item.notes&&<p className="queue-item-note">{item.notes}</p>}<DeliveryControls order={order} productId={item.id} locked={locked} readOnly={readonly} onAction={act}/></div>)}
      {order.notes&&<p className="order-note"><b>Kitchen note</b>{order.notes}</p>}
      <small>Added by {order.createdBy||'Admin'} · {new Date(order.date).toLocaleString('en-IN',{timeZone:'Asia/Kolkata'})}</small>
      {order.cancelReason&&<p>Cancelled: {order.cancelReason}</p>}
@@ -140,7 +142,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,mode="adm
    <div className="queue-list">{rows.map(renderOrder)}</div>
    {!rows.length&&<div className="queue-empty"><Check size={34}/><h3>{showHistory?'No past orders yet.':'All caught up.'}</h3><p>New orders will appear here as they come in.</p></div>}
   </>}
-  {edit&&<OrderEditor order={edit} products={products} busy={locked} error={error} onClose={()=>setEdit(null)} onSave={act}/>}
+  {edit&&<OrderEditor noteOptions={noteOptions} order={edit} products={products} busy={locked} error={error} onClose={()=>setEdit(null)} onSave={act}/>}
   {undoServed&&<Dialog label="Confirm undo served" onClose={()=>{if(!locked)setUndoServed(null)}}><div className="payment-dialog"><h2>Untick served for order #{undoServed.number}?</h2><p>All items will be marked unserved. A completed order will return to the active queue.</p><button className="brand-primary" disabled={locked} onClick={async()=>{if(await act({type:'orderUnserved',id:undoServed.id,originalRevision:undoServed.revision||0}))setUndoServed(null)}}>Yes, untick served</button><button type="button" disabled={locked} onClick={()=>setUndoServed(null)}>Keep served</button>{error&&<p role="alert" className="kitchen-error">{error}</p>}</div></Dialog>}
   {pay&&<Dialog label={completePayment?'Confirm served and paid':pay.paidAt?'Change recorded payment':'Record payment'} onClose={()=>{if(!locked)setPay(null)}}><div className="payment-dialog">
    <button className="dialog-x" disabled={locked} onClick={()=>setPay(null)} aria-label="Close payment"><X/></button>
