@@ -870,8 +870,28 @@ test('paid order deletion keeps activity and financial records without a reason'
 
 const {changeCart,removeCartItem}=await import(pathToFileURL(join(temp,'cart.mjs')));
 const {menuArtCell}=await import(pathToFileURL(join(temp,'menu-images.mjs')));
-test('cart follows tap order rather than menu order and latest additions appear at the top',()=>{
- let cart={};cart=changeCart(cart,secondId,1);cart=changeCart(cart,pId,1);cart=changeCart(cart,saleId,1);assert.deepEqual(Object.keys(cart),[saleId,pId,secondId]);cart=changeCart(cart,secondId,1);assert.deepEqual(Object.keys(cart),[secondId,saleId,pId]);assert.equal(cart[secondId],2);const original=structuredClone(cart);cart=removeCartItem(cart,pId);assert.deepEqual(original,{[secondId]:2,[pId]:1,[saleId]:1});cart=changeCart(cart,pId,1);assert.deepEqual(Object.keys(cart),[pId,secondId,saleId]);cart=changeCart(cart,pId,-1);assert.equal(pId in cart,false);assert.deepEqual(changeCart({},pId,-1),{});
+test('new cart items appear first and existing quantities never shuffle their positions',()=>{
+ let cart={};
+ cart=changeCart(cart,secondId,1);
+ cart=changeCart(cart,pId,1);
+ cart=changeCart(cart,saleId,1);
+ const order=[saleId,pId,secondId];
+ assert.deepEqual(Object.keys(cart),order);
+ cart=changeCart(cart,secondId,1);
+ assert.deepEqual(Object.keys(cart),order);
+ assert.equal(cart[secondId],2);
+ cart=changeCart(cart,pId,1);
+ assert.deepEqual(Object.keys(cart),order);
+ cart=changeCart(cart,pId,-1);
+ assert.deepEqual(Object.keys(cart),order);
+ const original=structuredClone(cart);
+ cart=removeCartItem(cart,pId);
+ assert.equal(original[pId],1);
+ cart=changeCart(cart,pId,1);
+ assert.deepEqual(Object.keys(cart),[pId,saleId,secondId]);
+ cart=changeCart(cart,pId,-1);
+ assert.equal(pId in cart,false);
+ assert.deepEqual(changeCart({},pId,-1),{});
 });
 test('food and water tiles each select their correct illustration',()=>{
  const names=['Crispy Veg Kathi Roll','Classic Paneer Kathi Roll','Magic Mushroom Kathi Roll','Salted Fries','Peri Peri Fries','Cheesy Peri Peri Fries','Loaded Fries','Water Bottle Small','Water Bottle Big'];assert.deepEqual(names.map(menuArtCell),[[0,0],[1,0],[2,0],[0,1],[1,1],[2,1],[0,2],[1,2],[2,2]]);
