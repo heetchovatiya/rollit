@@ -88,7 +88,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
       <span className={order.givenAt?'status-done':'status-wait'}>{['Deleted','Discarded','Completed'].includes(status)?status:order.givenAt?'Served':progress.given>0?'Partly served':'Preparing'}</span>
       <span className={order.paidAt?'status-done':'status-unpaid'}>{order.paidAt?(order.payment==='Friends & Family'?`Friends & Family · ${money(order.paidTotal||0)}`:order.payment==='UPI'?'Online paid':'Cash paid'):(order.paidTotal||order.discountTotal)?`Due ${money(paymentDue(order))}`:'Unpaid'}</span>
      </span>
-     <span className="order-amount"><strong>{money(order.total)}</strong>{mode==='queue'&&!readonly?<QueueTimer date={order.date} now={tick} blinkAfterMinutes={30}/>:<small><Clock size={12}/>{(mode!=='admin'||showHistory)?new Date(order.date).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}):`${minutes} min`}</small>}</span>
+     <span className="order-amount"><strong>{money(order.total)}</strong>{mode==='queue'&&!readonly?<QueueTimer date={order.date} now={tick} blinkAfterMinutes={40}/>:<small><Clock size={12}/>{(mode!=='admin'||showHistory)?new Date(order.date).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}):`${minutes} min`}</small>}</span>
      {open?<ChevronUp size={19}/>:<ChevronDown size={19}/>}
     </button>
     {!removed&&!readonly&&<div className="queue-row-actions">

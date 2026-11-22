@@ -3423,7 +3423,7 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 .queue-age-track{stroke:#e6dfd4}
 .queue-age-progress{stroke:currentColor;stroke-linecap:round;transition:stroke-dashoffset 1s linear,color 1s linear}
 .queue-age-value{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;font-weight:700;line-height:1}
-.queue-age-timer.is-overdue .queue-age-track{stroke:currentColor}
+.queue-age-timer.is-expired .queue-age-track{stroke:currentColor}
 .queue-age-timer.is-overdue{animation:queue-age-blink 1.4s ease-in-out infinite}
 @keyframes queue-age-blink{0%,100%{opacity:1}50%{opacity:.3}}
 @media(max-width:700px){.queue-card-heading .queue-age-timer{align-self:flex-start}}
