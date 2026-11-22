@@ -1,3 +1,4 @@
+import {itemTotal} from "./item-customization";
 import type { StoreState } from "./types";
 const calendar = new Intl.DateTimeFormat("en-CA", {
   timeZone: "Asia/Kolkata",
@@ -26,7 +27,7 @@ export function analyseStore(data: StoreState, days: number, now = new Date()) {
     string,
     { id: string; name: string; units: number; revenue: number; profit: number }
   >();
-  const payments = { Cash: 0, UPI: 0, Card: 0 };
+  const payments = { Cash: 0, UPI: 0, Card: 0, "Friends & Family":0 };
   let sales = 0,
     refunds = 0,
     profit = 0,
@@ -63,9 +64,9 @@ export function analyseStore(data: StoreState, days: number, now = new Date()) {
         profit: 0,
       };
       item.units += direction * line.qty;
-      item.revenue += direction * line.qty * line.price;
-      item.profit += direction * line.qty * (line.price - line.cost);
-      profit += direction * line.qty * (line.price - line.cost);
+      item.revenue += direction * itemTotal(line);
+      item.profit += direction * (itemTotal(line)-line.qty*line.cost);
+      profit += direction * (itemTotal(line)-line.qty*line.cost);
       items.set(line.id, item);
     }
   }

@@ -33,7 +33,7 @@ export function nextOrderNumber(orders:KitchenOrder[],at:string,resetTime='00:00
 export function paidQuantity(order:KitchenOrder,productId:string){
  return order.paidQuantities?.[productId]??(order.paidAt?order.items.find(i=>i.id===productId)?.qty||0:0);
 }
-export function paymentDue(order:KitchenOrder){return Math.max(0,order.total-(order.paidTotal??(order.paidAt?order.total:0)))}
+export function paymentDue(order:KitchenOrder){return Math.max(0,order.total-(order.paidTotal??(order.paidAt?order.total:0))-(order.discountTotal||0))}
 
 export function queueDayGroups(orders:KitchenOrder[],now=Date.now()){
  const today=businessDay(now);

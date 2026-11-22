@@ -1,3 +1,4 @@
+import {itemTotal,sliceItem,customizationForUnit} from "./item-customization";
 import {businessDay} from "./business-day";
 import {availableUnits,recipeUsage,itemCost,stockRound} from "./recipes";
 import { deliveredQuantity, deliveryProgress, nextOrderNumber, paidQuantity, paymentDue, inCurrentQueue } from "./delivery";
@@ -105,7 +106,7 @@ export function applyAction(
     state.orders ||= [];
     const prior=state.orders.find(o=>o.id===action.id);
     if(prior){
-      if((action.payment&&prior.payment!==action.payment)||prior.customer!==(action.customer||"Walk-in customer") || prior.notes!==action.notes || prior.orderType!==action.orderType || prior.orderReference!==action.orderReference || prior.createdBy!==action.actor || prior.items.length!==action.items.length || !action.items.every(i=>prior.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice+(i.extraPrice||0)&&(p.extraPrice||0)===(i.extraPrice||0)&&(p.notes||"")===(i.notes||"")))) throw new StoreError("This order reference is already used. Refresh to check the queue.");
+      if((action.payment&&prior.payment!==action.payment)||prior.customer!==(action.customer||"Walk-in customer") || prior.notes!==action.notes || prior.orderType!==action.orderType || prior.orderReference!==action.orderReference || prior.createdBy!==action.actor || prior.items.length!==action.items.length || !action.items.every(i=>prior.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice+(i.extraPrice||0)&&(p.extraPrice||0)===(i.extraPrice||0)&&(p.notes||"")===(i.notes||"")&&JSON.stringify(p.unitCustomizations||[])===JSON.stringify(i.unitCustomizations||[])))) throw new StoreError("This order reference is already used. Refresh to check the queue.");
       return current;
     }
     if(state.sales.some(s=>s.id===action.id))throw new StoreError("This reference is already used by a sale.");
@@ -118,8 +119,9 @@ export function applyAction(
       if(!p||p.archived)throw new StoreError("An item is unavailable. Refresh your menu.");
       if(p.price!==item.expectedPrice)throw new StoreError(`Price changed for ${p.name}. Refresh your menu.`);
       if(action.unlimited===false&&availableUnits(state,p)<item.qty)throw new StoreError(`Only ${availableUnits(state,p)} units of ${p.name} remain.`);
-      const snapshot={id:p.id,name:p.name,notes:item.notes||"",extraPrice:item.extraPrice||0,qty:item.qty,price:p.price+(item.extraPrice||0),cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??(order.rawInventoryOnly?[]:undefined)};ingredients(snapshot,-item.qty,"Order reserved",order.id,order.rawInventoryOnly);
-      order.items.push(snapshot);order.total+=snapshot.price*item.qty;
+      if(item.unitCustomizations?.some(custom=>custom.unit>item.qty))throw new StoreError("An item number exceeds its quantity.",400);
+      const snapshot={unitCustomizations:item.unitCustomizations,id:p.id,name:p.name,notes:item.notes||"",extraPrice:item.extraPrice||0,qty:item.qty,price:p.price+(item.extraPrice||0),cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??(order.rawInventoryOnly?[]:undefined)};ingredients(snapshot,-item.qty,"Order reserved",order.id,order.rawInventoryOnly);
+      order.items.push(snapshot);order.total+=itemTotal(snapshot);
       move(p,-item.qty,"Order",`Reserved for order #${order.number}`,order.id);
     }
     if(!Number.isSafeInteger(order.total)||order.total>999999999)throw new StoreError("Order total is too large.",400);
@@ -128,7 +130,7 @@ export function applyAction(
     if(action.payment)return applyAction(state,{type:"orderPaid",id:order.id,payment:action.payment,actor:action.actor});
   } else if(action.type==="archiveOrder") {
     const order=state.orders.find(o=>o.id===action.id);if(!order)throw new StoreError("Order not found.",404);
-    if(order.hiddenAt)return current;if(!order.paidAt&&!(order.paidTotal||0)&&!order.cancelledAt)throw new StoreError("Remove unpaid orders using the normal order removal action.");
+    if(order.hiddenAt)return current;if(!order.paidAt&&!(order.paidTotal||0)&&!order.discountTotal&&!order.cancelledAt)throw new StoreError("Remove unpaid orders using the normal order removal action.");
     if((order.revision||0)!==action.originalRevision)throw new StoreError("Order changed. Refresh before deleting it.");
     order.hiddenAt=now;order.deletedAt=now;order.deleteReason=action.reason;order.revision=(order.revision||0)+1;event(order,"Deleted",action.actor,order.paidAt?"Removed from order history; sale retained.":"Discarded order deleted from history.");
   } else if(action.type==="editOrder") {
@@ -136,7 +138,7 @@ export function applyAction(
     if(!order)throw new StoreError("Order not found.",404);
     if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("Discarded or deleted orders cannot be edited.");
     if((order.completedAt||(order.paidAt&&order.givenAt))&&!action.manage)throw new StoreError("Edit history orders in Manage orders.",403);
-    const same=order.customer===(action.customer||"Walk-in customer")&&order.notes===action.notes&&order.orderType===action.orderType&&order.orderReference===action.orderReference&&order.items.length===action.items.length&&action.items.every(i=>order.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice&&(i.notes===undefined||(p.notes||"")===i.notes)));
+    const same=order.customer===(action.customer||"Walk-in customer")&&order.notes===action.notes&&order.orderType===action.orderType&&order.orderReference===action.orderReference&&order.items.length===action.items.length&&action.items.every(i=>order.items.some(p=>p.id===i.id&&p.qty===i.qty&&p.price===i.expectedPrice&&(i.notes===undefined||(p.notes||"")===i.notes)&&(i.unitCustomizations===undefined||JSON.stringify(p.unitCustomizations||[])===JSON.stringify(i.unitCustomizations))));
     if(same)return current;
     if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed on another device. Refresh and reopen the editor.");
     const previous=order.items.map(i=>`${i.qty}× ${i.name}`).join(" · ");
@@ -150,13 +152,20 @@ export function applyAction(
       if(item.qty<deliveredQuantity(order,item.id))throw new StoreError("Quantity cannot be lower than the number already served.");
       const price=prior?.price??p.price;
       if(item.expectedPrice!==price)throw new StoreError("An item price changed. Refresh and reopen the editor.");
-      items.push(prior?{...prior,qty:item.qty,notes:item.notes??prior.notes}:{id:p.id,name:p.name,notes:item.notes||"",qty:item.qty,price:p.price,cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??((action.unlimited||order.rawInventoryOnly)?[]:undefined)});
+      if(item.unitCustomizations?.some(custom=>custom.unit>item.qty))throw new StoreError("An item number exceeds its quantity.",400);
+      const customizations=(item.unitCustomizations??prior?.unitCustomizations)?.filter(custom=>custom.unit<=item.qty);
+      if(prior&&item.unitCustomizations!==undefined){
+        const affected=new Set([...(prior.unitCustomizations||[]),...(customizations||[])].map(custom=>custom.unit));
+        const updated={...prior,unitCustomizations:customizations};
+        if([...affected].some(unit=>unit<=paidQuantity(order,item.id)&&customizationForUnit(prior,unit).extraPrice!==customizationForUnit(updated,unit).extraPrice))throw new StoreError("Unpay the item before changing a paid extra charge.");
+      }
+      items.push(prior?{...prior,qty:item.qty,notes:item.notes??prior.notes,unitCustomizations:customizations}:{unitCustomizations:customizations,id:p.id,name:p.name,notes:item.notes||"",qty:item.qty,price:p.price,cost:itemCost(state,p),ingredientUsage:recipeUsage(state,p)??((action.unlimited||order.rawInventoryOnly)?[]:undefined)});
     }
     for(const old of order.items){
       if(!seen.has(old.id)&&paidQuantity(order,old.id)>0)throw new StoreError("An already-paid item cannot be removed.");
       if(!seen.has(old.id)&&deliveredQuantity(order,old.id)>0)throw new StoreError("An already-served item cannot be removed.");
     }
-    const total=items.reduce((n,i)=>n+i.price*i.qty,0);
+    const total=items.reduce((n,i)=>n+itemTotal(i),0);
     if(!Number.isSafeInteger(total)||total>999999999)throw new StoreError("Order total is too large.",400);
     const changes=[...new Set([...order.items.map(i=>i.id),...items.map(i=>i.id)])].map(id=>({id,delta:(items.find(i=>i.id===id)?.qty||0)-(order.items.find(i=>i.id===id)?.qty||0)})).sort((a,b)=>a.delta-b.delta);
     for(const {id,delta} of changes){
@@ -180,9 +189,9 @@ export function applyAction(
     if(!order)throw new StoreError("Order not found.",404);
     if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("This order was discarded or deleted.");
     if(!inCurrentQueue(order,Date.parse(now))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
-    if(action.payment==="Unpaid"&&!order.paidAt&&!order.paidTotal)return current;
+    if(action.payment==="Unpaid"&&!order.paidAt&&!order.paidTotal&&!order.discountTotal)return current;
     if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed. Refresh before changing payment.");
-    if(!order.paidAt&&!order.paidTotal)throw new StoreError("Record payment before changing its mode.");
+    if(!order.paidAt&&!order.paidTotal&&!order.discountTotal)throw new StoreError("Record payment before changing its mode.");
     const paidDates=new Set((order.events||[]).filter(event=>event.action==="Paid").map(event=>event.at));
     const paidTotal=order.paidTotal??order.total;
     const receipts=state.sales.filter(sale=>sale.orderId===order.id||sale.id===order.id);
@@ -199,6 +208,7 @@ export function applyAction(
       delete order.payment;
       delete order.completedAt;
       order.paidTotal=0;
+      order.discountTotal=0;
       order.paidQuantities={};
       event(order,"Edited",action.actor,`Payment of ${paidTotal/100} undone; payment receipts retained in the correction log.`);
     }else{
@@ -209,6 +219,18 @@ export function applyAction(
       event(order,"Edited",action.actor,`Payment mode changed from ${previous} to ${action.payment}.`);
     }
     order.revision=(order.revision||0)+1;
+  } else if(action.type==="orderFriendsFamily") {
+    const order=state.orders.find(o=>o.id===action.id);
+    if(!order)throw new StoreError("Order not found.",404);
+    if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("This order was discarded or deleted.");
+    if(order.paidAt&&order.payment==="Friends & Family"&&order.paidTotal===action.paidAmount&&(!action.serve||order.givenAt))return current;
+    if(!inCurrentQueue(order,Date.parse(now))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
+    if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed. Refresh before recording payment.");
+    if(action.paidAmount>order.total)throw new StoreError("Amount paid cannot exceed the order total.",400);
+    let next=state;
+    if(order.paidAt||order.paidTotal||order.discountTotal)next=applyAction(next,{type:"orderPayment",id:order.id,originalRevision:order.revision||0,payment:"Unpaid",manage:action.manage,actor:action.actor},now);
+    next=applyAction(next,{type:"orderPaid",id:order.id,originalRevision:next.orders.find(o=>o.id===order.id)!.revision||0,payment:"Friends & Family",paidAmount:action.paidAmount,actor:action.actor},now);
+    return action.serve?applyAction(next,{type:"orderGiven",id:order.id,actor:action.actor},now):next;
   } else if(action.type==="orderComplete") {
     const order=state.orders.find(o=>o.id===action.id);
     if(!order)throw new StoreError("Order not found.",404);
@@ -252,16 +274,16 @@ export function applyAction(
     const order=state.orders?.find(o=>o.id===action.id);
     if(!order)throw new StoreError("Order not found.",404);
     if(action.type==="cancelOrder"||action.type==="discardOrder"){
-      const reason=action.type==="discardOrder"?"Order discarded":action.reason;
+      const reason=action.type==="discardOrder"?(action.reason||"Order discarded"):action.reason;
       if(order.cancelledAt)return current;
       if(action.type==="discardOrder"){
         if(!inCurrentQueue(order,Date.parse(now))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
         if(action.originalRevision!==undefined&&action.originalRevision!==(order.revision||0))throw new StoreError("This order changed. Refresh before discarding it.");
       }
-      if(action.type==="cancelOrder"&&(order.paidAt||(order.paidTotal||0)>0))throw new StoreError("Paid orders cannot be removed. Ask an admin about a return.");
+      if(action.type==="cancelOrder"&&(order.paidAt||(order.paidTotal||0)>0||!!order.discountTotal))throw new StoreError("Paid orders cannot be removed. Ask an admin about a return.");
       for(const item of order.items){const restore=item.qty-deliveredQuantity(order,item.id);if(!restore)continue;const p=state.products.find(p=>p.id===item.id);if(!p)throw new StoreError("Stock cannot be restored. Ask an admin.");ingredients(item,restore,"Order removed",order.id,order.rawInventoryOnly);move(p,restore,"Order cancelled",reason,order.id);}
       order.cancelledAt=now;order.cancelReason=reason;order.revision=(order.revision||0)+1;
-      if(action.type==="discardOrder"){order.discardedAt=now;event(order,"Discarded",action.actor,"Order discarded; unserved reservations released.");}
+      if(action.type==="discardOrder"){order.discardedAt=now;event(order,"Discarded",action.actor,`Order discarded: ${reason}; unserved reservations released.`);}
       else{order.deletedAt=now;event(order,"Deleted",action.actor,"Unpaid order deleted; unserved raw material reservations released.");}
     }else{
       if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("This order was discarded or deleted.");
@@ -272,11 +294,18 @@ export function applyAction(
         const hasPayment=order.paidQuantities!==undefined;
         if(!hasPayment&&state.sales.some(s=>s.id===order.id))throw new StoreError("A sale already uses this order reference.");
         const due=paymentDue(order);
-        const paidItems=order.items.map(i=>({...i,qty:i.qty-paidQuantity(order,i.id)})).filter(i=>i.qty>0);
-        order.paidAt=now;order.payment=action.payment;order.revision=(order.revision||0)+1;event(order,"Paid",action.actor,action.payment==="UPI"?"Online payment recorded.":"Cash payment recorded.");
-        state.sales.unshift({id:hasPayment?crypto.randomUUID():order.id,orderId:order.id,date:now,payment:action.payment,customer:order.customer,items:structuredClone(paidItems),total:due,notes:order.notes,orderType:order.orderType,orderReference:order.orderReference||`Order #${order.number}`,business:order.business});
+        const paidItems=order.items.map(item=>sliceItem(item,paidQuantity(order,item.id),item.qty-paidQuantity(order,item.id))).filter(item=>item.qty>0);
+        const amount=action.payment==="Friends & Family"?action.paidAmount:due;
+        if(amount===undefined||amount>due)throw new StoreError("Enter an amount between zero and the amount due.",400);
+        if(action.payment==="Friends & Family"){
+          let weight=0,allocated=0;
+          for(const item of paidItems){weight+=itemTotal(item);const cumulative=due?Number(BigInt(amount)*BigInt(weight)/BigInt(due)):0;item.lineTotal=cumulative-allocated;allocated=cumulative;}
+        }
+        order.paidAt=now;order.payment=action.payment;order.revision=(order.revision||0)+1;event(order,"Paid",action.actor,action.payment==="Friends & Family"?`Friends & Family: ${amount/100} paid; ${(due-amount)/100} discounted.`:action.payment==="UPI"?"Online payment recorded.":"Cash payment recorded.");
+        state.sales.unshift({id:hasPayment?crypto.randomUUID():order.id,orderId:order.id,date:now,payment:action.payment,customer:order.customer,items:structuredClone(paidItems),total:amount,notes:order.notes,orderType:order.orderType,orderReference:order.orderReference||`Order #${order.number}`,business:order.business});
         order.paidQuantities=Object.fromEntries(order.items.map(i=>[i.id,i.qty]));
-        order.paidTotal=order.total;
+        order.paidTotal=(order.paidTotal||0)+amount;
+        order.discountTotal=(order.discountTotal||0)+due-amount;
       }
       if(order.givenAt&&order.paidAt)order.completedAt=now;
     }

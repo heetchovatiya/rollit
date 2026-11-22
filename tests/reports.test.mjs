@@ -7,7 +7,7 @@ import {join} from 'node:path';
 import {pathToFileURL} from 'node:url';
 import ts from 'typescript';
 const temp=await mkdtemp(join(tmpdir(),'rollit-reports-'));after(()=>rm(temp,{recursive:true,force:true}));
-await writeFile(join(temp,'business-day.mjs'),ts.transpileModule(await readFile(new URL('../lib/pos/business-day.ts',import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText);
+for(const module of ['business-day','item-customization'])await writeFile(join(temp,module+'.mjs'),ts.transpileModule(await readFile(new URL(`../lib/pos/${module}.ts`,import.meta.url),'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replaceAll('"./item-customization"','"./item-customization.mjs"'));
 await writeFile(join(temp,'reports.mjs'),await readFile(new URL('../cloudflare/reports.mjs',import.meta.url),'utf8'));
 const {runDailyReports,handleReports}=await import(pathToFileURL(join(temp,'reports.mjs')));
 const {businessDay,businessWindow,buildDailyReport,renderDailyReport}=await import(pathToFileURL(join(temp,'business-day.mjs')));
@@ -18,3 +18,14 @@ test('custom close defines India business days and report includes ledger sales 
 test('cron waits for close, sends once to each recipient and concurrent runs do not duplicate delivery',async()=>{const s=fixture(),db=dbFor(s),env={DB:db,RESEND_API_KEY:'test-resend-key'};let calls=0;const send=async()=>{calls++;return Response.json({id:'provider-'+calls})};try{await runDailyReports(env,Date.parse('2026-11-01T22:29:00Z'),send);assert.equal(calls,0);await Promise.all([runDailyReports(env,closed,send),runDailyReports(env,closed,send)]);assert.equal(calls,1);await runDailyReports(env,closed+600000,send);assert.equal(calls,1);const row=await db.prepare('SELECT status,message_id FROM pos_report_deliveries').first();assert.equal(row.status,'accepted');assert.equal(row.message_id,'provider-1');}finally{db.close()}});
 test('network retry reuses immutable email body and Resend idempotency key',async()=>{const db=dbFor(fixture()),env={DB:db,RESEND_API_KEY:'test-resend-key'},requests=[];const send=async(url,init)=>{requests.push(init);if(requests.length===1)throw Error('Temporary network failure');return Response.json({id:'accepted-after-retry'})};try{await runDailyReports(env,closed,send);await runDailyReports(env,closed+300001,send);assert.equal(requests.length,2);assert.equal(requests[0].body,requests[1].body);assert.equal(requests[0].headers['Idempotency-Key'],requests[1].headers['Idempotency-Key']);assert.equal((await db.prepare('SELECT status FROM pos_report_deliveries').first()).status,'accepted');}finally{db.close()}});
 test('report endpoint rejects chef, missing credentials and foreign origin without sending; status never exposes key',async()=>{const db=dbFor(fixture()),env={DB:db,RESEND_API_KEY:'secret-value-not-for-output'},admin={role:'admin'},base='https://rollit.test/api/reports';try{assert.equal((await handleReports(new Request(base),env,{role:'chef'})).status,403);const r=await handleReports(new Request(base),env,admin),text=await r.text();assert.ok(!text.includes(env.RESEND_API_KEY));assert.equal((await handleReports(new Request(base,{method:'POST',headers:{Origin:'https://wrong.test'},body:'{}'}),env,admin)).status,403);const missing=await handleReports(new Request(base,{method:'POST',headers:{Origin:'https://rollit.test'},body:JSON.stringify({action:'test',id:crypto.randomUUID()})}),{DB:db},admin);assert.equal(missing.status,503);}finally{db.close()}});
+
+test('Friends and Family reporting includes actual received amounts and gifted food costs',()=>{
+ const state=fixture(),date='2026-11-01T20:00:00Z';
+ state.sales=[{id:'gift',date,payment:'Friends & Family',total:0,items:[{id:'p',name:'Paneer',qty:2,price:5000,cost:3000,lineTotal:0}]},{id:'discount',date,payment:'Friends & Family',total:2500,items:[{id:'p',name:'Paneer',qty:1,price:5000,cost:3000,lineTotal:2500}]}];
+ const report=buildDailyReport(state,businessWindow('2026-11-01','04:00'));
+ assert.equal(report.sales,2500);
+ assert.equal(report.grossProfit,-6500);
+ assert.equal(report.payments['Friends & Family'],2500);
+ assert.equal(report.topItems[0].sales,2500);
+ assert.equal(report.paidOrders,2);
+});

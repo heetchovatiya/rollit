@@ -3407,3 +3407,13 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 
 .chef-v2 .chef-order-fields{position:static;top:auto;overflow:visible;background:#efe2cf;border-bottom:2px solid #cfb99b;padding:16px 13px;margin-bottom:4px}
 .chef-v2 .chef-order-fields .order-tap-group>span,.chef-v2 .chef-order-fields .quick-choices>span{color:#6b5039}
+
+.friends-family-choice{width:100%;min-height:44px;margin-top:14px;border:1px solid #c7a783;background:#f3e5d4;color:#754520;border-radius:9px}
+.friends-family-form,.discard-reason{display:grid;gap:12px;margin:18px 0}
+.friends-family-form label,.discard-reason label{display:grid;gap:7px;font-size:12px}
+.friends-family-form input,.discard-reason textarea,.item-custom-dropdown select,.item-custom-dropdown input{width:100%;min-height:42px;padding:10px;border:1px solid #e0d2be;border-radius:8px;background:#fffdfa;color:#59371e;font:inherit}
+.discard-reason>div{display:flex;gap:7px;flex-wrap:wrap}
+.discard-reason>div>button{border:1px solid #e0d2be;border-radius:8px;padding:9px;font-size:11px;background:#f5ebdd;color:#73543a}
+.discard-reason>div>button[aria-pressed=true]{background:#ebd0ad;border-color:#b77443}
+
+.payment-fill.fill-3{background:#9c6f91}

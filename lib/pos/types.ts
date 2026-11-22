@@ -14,7 +14,10 @@ export interface Product {
   archived?: boolean;
   billIds?: string[];
 }
+export interface UnitCustomization {unit:number;notes:string;extraPrice:number}
 export interface SaleItem {
+  unitCustomizations?:UnitCustomization[];
+  lineTotal?:number;
   extraPrice?: number;
   notes?: string;
   ingredientUsage?: {ingredientId:string;qty:number;unitCost:number}[];
@@ -28,7 +31,7 @@ export interface Sale {
   orderId?: string;
   id: string;
   date: string;
-  payment: "Cash" | "Card" | "UPI";
+  payment: "Cash" | "Card" | "UPI" | "Friends & Family";
   customer: string;
   items: SaleItem[];
   total: number;
@@ -112,7 +115,8 @@ export interface KitchenOrder {
   paidAt?: string;
   paidQuantities?: Record<string, number>;
   paidTotal?: number;
-  payment?: "Cash" | "UPI";
+  payment?: "Cash" | "UPI" | "Friends & Family";
+  discountTotal?:number;
   completedAt?: string;
   cancelledAt?: string;
   cancelReason?: string;

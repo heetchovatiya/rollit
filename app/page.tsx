@@ -1,4 +1,5 @@
 "use client";
+import {itemTotal} from "@/lib/pos/item-customization";
 import { RollitLogo } from "@/components/pos/rollit-logo";
 import { useEffect, useRef, useState } from "react";
 import type { LucideIcon } from "lucide-react";
@@ -339,7 +340,7 @@ export default function Home() {
     const action = pendingOrder.current || {
       type: "sale" as const,
       id: saleId.current,
-      payment: payment as Sale["payment"],
+      payment: payment as "Cash"|"UPI"|"Card",
       customer,
       orderType,
       orderReference,
@@ -954,9 +955,9 @@ export default function Home() {
               <div className="metric" key={i.id}>
                 <span>
                   {i.qty} × {i.name}
-                  <small>{money(i.price)} each</small>
+                  <small>{money(i.price)} each{i.lineTotal!==undefined?' · discount applied':''}</small>{i.notes&&<small>{i.notes}</small>}{i.unitCustomizations?.map(custom=><small key={custom.unit}>Item {custom.unit}: {custom.notes||'Regular'} · Extra {money(custom.extraPrice)}</small>)}
                 </span>
-                <strong>{money(i.price * i.qty)}</strong>
+                <strong>{money(itemTotal(i))}</strong>
               </div>
             ))}
             {receipt.returnedAt && (

@@ -1,4 +1,5 @@
 "use client";
+import {itemTotal} from "@/lib/pos/item-customization";
 import { useState } from "react";
 import { Search, Receipt } from "lucide-react";
 import { money, dateTime, downloadCsv } from "@/lib/pos/format";
@@ -62,7 +63,7 @@ export function SalesHistory({
           i.name,
           i.qty,
           i.price / 100,
-          (i.qty * i.price) / 100,
+          itemTotal(i) / 100,
           s.total / 100,
           s.returnedAt || "",
           s.returnReason || "",

@@ -10,7 +10,7 @@ writeFileSync('work/cloudflare-deploy/private-entry.mjs',readFileSync('cloudflar
 cpSync('cloudflare/auth.mjs','work/cloudflare-deploy/auth.mjs');
 cpSync('cloudflare/manage-pin.mjs','work/cloudflare-deploy/manage-pin.mjs');
 cpSync('cloudflare/reports.mjs','work/cloudflare-deploy/reports.mjs');
-writeFileSync('work/cloudflare-deploy/business-day.mjs',ts.transpileModule(readFileSync('lib/pos/business-day.ts','utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText);
+for(const module of ['business-day','item-customization'])writeFileSync(`work/cloudflare-deploy/${module}.mjs`,ts.transpileModule(readFileSync(`lib/pos/${module}.ts`,'utf8'),{compilerOptions:{target:ts.ScriptTarget.ES2022,module:ts.ModuleKind.ES2022}}).outputText.replaceAll('"./item-customization"','"./item-customization.mjs"'));
 const cli=['--import','./scripts/sites-env.mjs','./node_modules/wrangler/bin/wrangler.js'];
 let result=spawnSync(process.execPath,[...cli,'deploy','--config','cloudflare/wrangler.json'],{stdio:'inherit'});
 if(result.status!==0)process.exit(result.status||1);

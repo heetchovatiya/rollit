@@ -9,6 +9,7 @@ import ts from "typescript";
 const temp = await mkdtemp(join(tmpdir(), "roll-it-tests-"));
 for (const name of [
   "types",
+  "item-customization",
   "business-day",
   "cart",
   "menu-images",
@@ -1190,4 +1191,81 @@ test('extras support ten or twenty rupees without changing other items or accept
  assert.deepEqual(s.orders[0].items.map(item=>item.price),[7000,5000]);
  for(const extraPrice of [-1000,500,3000,10.5])assert.equal(actionSchema.safeParse({...action,items:[{...action.items[0],extraPrice}]}).success,false);
  assert.throws(()=>applyAction(initial,{...action,items:[{...action.items[0],expectedPrice:4000}]}),/Price changed/);
+});
+
+const {itemTotal}=await import(pathToFileURL(join(temp,'item-customization.mjs')));
+test('Friends and Family settles for a custom amount or zero and reports only money received',()=>{
+ for(const amount of [0,2500]){
+  let s=applyAction(normalizeState(state()),orderAction());
+  const action=actionSchema.parse({type:'orderFriendsFamily',id:saleId,originalRevision:0,paidAmount:amount});
+  s=applyAction(s,action);
+  assert.ok(s.orders[0].paidAt);
+  assert.equal(s.orders[0].payment,'Friends & Family');
+  assert.equal(s.orders[0].paidTotal,amount);
+  assert.equal(s.orders[0].discountTotal,10000-amount);
+  assert.equal(s.sales[0].total,amount);
+  assert.equal(s.sales[0].items.reduce((sum,item)=>sum+itemTotal(item),0),amount);
+  assert.equal(s.products[0].stock,8);
+  const analytics=analyseStore(s,7);
+  assert.equal(analytics.sales,amount);
+  assert.equal(analytics.profit,amount-s.sales[0].items.reduce((cost,item)=>cost+item.cost*item.qty,0));
+  assert.strictEqual(applyAction(s,action),s);
+  s=applyAction(s,{type:'orderPayment',id:saleId,originalRevision:s.orders[0].revision,payment:'Unpaid'});
+  assert.equal(s.sales.length,0);
+  assert.equal(s.orders[0].discountTotal,0);
+  assert.equal(s.orders[0].paidAt,undefined);
+ }
+});
+test('Friends and Family corrects existing payments atomically and handles extra items later',()=>{
+ let s=applyAction(normalizeState(state()),orderAction());
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ assert.throws(()=>applyAction(s,{type:'orderFriendsFamily',id:saleId,originalRevision:0,paidAmount:0}),/changed/);
+ assert.throws(()=>applyAction(s,{type:'orderFriendsFamily',id:saleId,originalRevision:s.orders[0].revision,paidAmount:10001}),/exceed/);
+ s=applyAction(s,{type:'orderFriendsFamily',id:saleId,originalRevision:s.orders[0].revision,paidAmount:2000});
+ assert.equal(s.sales.length,1);
+ assert.equal(s.voidedSales.length,1);
+ s=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:3,expectedPrice:5000}]}));
+ assert.equal(s.orders[0].paidAt,undefined);
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'UPI'});
+ assert.equal(s.sales[0].total,5000);
+ assert.equal(s.orders[0].paidTotal,7000);
+ assert.equal(s.orders[0].discountTotal,8000);
+});
+test('specific-unit extras affect only that unit and survive stock, payment and edit flows',()=>{
+ const units=[{unit:1,notes:'Spicy, extra sauce',extraPrice:1000},{unit:2,notes:'No onion',extraPrice:0}];
+ const action=actionSchema.parse({...orderAction(),items:[{id:pId,qty:2,expectedPrice:5000,unitCustomizations:units}]});
+ let s=applyAction(normalizeState(state()),action);
+ assert.equal(s.orders[0].total,11000);
+ assert.equal(itemTotal(s.orders[0].items[0]),11000);
+ assert.deepEqual(s.orders[0].items[0].unitCustomizations,units);
+ assert.strictEqual(applyAction(s,action),s);
+ s=applyAction(s,editKitchen(s.orders[0],{customer:'Updated'}));
+ assert.deepEqual(s.orders[0].items[0].unitCustomizations,units);
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ assert.equal(s.sales[0].total,11000);
+ assert.equal(s.products[0].stock,8);
+ assert.throws(()=>applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:2,expectedPrice:5000,unitCustomizations:[]}]})),/paid extra/);
+});
+test('additional customized units produce a correctly sliced payment receipt',()=>{
+ let s=applyAction(normalizeState(state()),orderAction(saleId,1));
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
+ const units=[{unit:2,notes:'Extra sauce',extraPrice:2000}];
+ s=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:2,expectedPrice:5000,unitCustomizations:units}]}));
+ assert.equal(s.orders[0].total,12000);
+ s=applyAction(s,{type:'orderPaid',id:saleId,payment:'UPI'});
+ assert.equal(s.sales[0].total,7000);
+ assert.deepEqual(s.sales[0].items[0].unitCustomizations,[{unit:1,notes:'Extra sauce',extraPrice:2000}]);
+ assert.equal(itemTotal(s.sales[0].items[0]),7000);
+});
+test('discard comment is retained with the order and activity log',()=>{
+ let s=applyAction(normalizeState(state()),orderAction());
+ s=applyAction(s,actionSchema.parse({type:'discardOrder',id:saleId,reason:'Equipment not available',originalRevision:0}));
+ assert.equal(s.orders[0].cancelReason,'Equipment not available');
+ assert.match(s.orders[0].events.at(-1).details,/Equipment not available/);
+ assert.equal(actionSchema.safeParse({type:'discardOrder',id:saleId,reason:' '}).success,false);
+});
+test('invalid unit numbers and duplicate customizations are rejected',()=>{
+ const action={...orderAction(),items:[{id:pId,qty:2,expectedPrice:5000,unitCustomizations:[{unit:3,notes:'Spicy',extraPrice:1000}]}]};
+ assert.throws(()=>applyAction(normalizeState(state()),actionSchema.parse(action)),/exceeds/);
+ assert.equal(actionSchema.safeParse({...action,items:[{...action.items[0],unitCustomizations:[{unit:1,notes:'',extraPrice:0},{unit:1,notes:'',extraPrice:1000}]}]}).success,false);
 });
