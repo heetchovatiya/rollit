@@ -56,3 +56,9 @@ test('chef can edit queue orders and undo served while remaining signed in',()=>
  assert.equal(mayChefAccess('/api/pos','POST','orderComplete'),true);
  assert.equal(mayChefAccess('/api/pos','POST','orderFriendsFamily'),true);
 });
+
+test('chef state exposes receipt totals without exposing sales or inventory costs',()=>{
+ const state=chefState({products:[],orders:[],settings:{businessName:'Roll-IT'},orderPayments:{one:{online:1200,offline:300}},sales:[{secret:'private'}]});
+ assert.deepEqual(state.orderPayments,{one:{online:1200,offline:300}});
+ assert.equal(state.sales,undefined);
+});

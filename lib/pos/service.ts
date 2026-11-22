@@ -1,7 +1,7 @@
 import {itemTotal,sliceItem,customizationForUnit} from "./item-customization";
 import {businessDay} from "./business-day";
 import {availableUnits,recipeUsage,itemCost,stockRound} from "./recipes";
-import { deliveredQuantity, deliveryProgress, nextOrderNumber, paidQuantity, paymentDue, inCurrentQueue } from "./delivery";
+import { deliveredQuantity, deliveryProgress, nextOrderNumber, paidQuantity, paymentDue, inCurrentQueue, isFriendsFamily } from "./delivery";
 import { defaultSettings, sections } from "./settings";
 import type { Product, Sale, StockMovement, StoreState } from "./types";
 import type { StoreAction } from "./validation";
@@ -112,7 +112,7 @@ export function applyAction(
     if(state.sales.some(s=>s.id===action.id))throw new StoreError("This reference is already used by a sale.");
     const seen=new Set<string>();
     const b=state.settings||defaultSettings();
-    const order: import("./types").KitchenOrder={id:action.id,number:nextOrderNumber(state.orders,now,b.orderResetTime||"00:00"),businessDay:businessDay(now,b.orderResetTime||"00:00"),date:now,customer:action.customer||"Walk-in customer",notes:action.notes,orderType:action.orderType,orderReference:action.orderReference,createdBy:action.actor,items:[],total:0,revision:0,rawInventoryOnly:action.unlimited!==false,business:{name:b.businessName,phone:b.phone,address:b.address,footer:b.receiptFooter}};
+    const order: import("./types").KitchenOrder={friendsAndFamily:action.customer==='Friends & Family',id:action.id,number:nextOrderNumber(state.orders,now,b.orderResetTime||"00:00"),businessDay:businessDay(now,b.orderResetTime||"00:00"),date:now,customer:action.customer||"Walk-in customer",notes:action.notes,orderType:action.orderType,orderReference:action.orderReference,createdBy:action.actor,items:[],total:0,revision:0,rawInventoryOnly:action.unlimited!==false,business:{name:b.businessName,phone:b.phone,address:b.address,footer:b.receiptFooter}};
     for(const item of action.items){
       if(seen.has(item.id))throw new StoreError("A product appears twice.",400);seen.add(item.id);
       const p=state.products.find(p=>p.id===item.id);
@@ -223,13 +223,15 @@ export function applyAction(
     const order=state.orders.find(o=>o.id===action.id);
     if(!order)throw new StoreError("Order not found.",404);
     if(order.cancelledAt||order.hiddenAt||order.deletedAt)throw new StoreError("This order was discarded or deleted.");
-    if(order.paidAt&&order.payment==="Friends & Family"&&order.paidTotal===action.paidAmount&&(!action.serve||order.givenAt))return current;
+    if(!isFriendsFamily(order))throw new StoreError("Choose Friends & Family in customer type when placing this order.",400);
+    const payment=action.payment||"Friends & Family";
+    if(order.paidAt&&order.payment===payment&&order.paidTotal===action.paidAmount&&(!action.serve||order.givenAt))return current;
     if(!inCurrentQueue(order,Date.parse(now))&&!action.manage)throw new StoreError("Change history orders in Manage orders.",403);
     if((order.revision||0)!==action.originalRevision)throw new StoreError("This order changed. Refresh before recording payment.");
     if(action.paidAmount>order.total)throw new StoreError("Amount paid cannot exceed the order total.",400);
     let next=state;
     if(order.paidAt||order.paidTotal||order.discountTotal)next=applyAction(next,{type:"orderPayment",id:order.id,originalRevision:order.revision||0,payment:"Unpaid",manage:action.manage,actor:action.actor},now);
-    next=applyAction(next,{type:"orderPaid",id:order.id,originalRevision:next.orders.find(o=>o.id===order.id)!.revision||0,payment:"Friends & Family",paidAmount:action.paidAmount,actor:action.actor},now);
+    next=applyAction(next,{type:"orderPaid",id:order.id,originalRevision:next.orders.find(o=>o.id===order.id)!.revision||0,payment,paidAmount:action.paidAmount,actor:action.actor},now);
     return action.serve?applyAction(next,{type:"orderGiven",id:order.id,actor:action.actor},now):next;
   } else if(action.type==="orderComplete") {
     const order=state.orders.find(o=>o.id===action.id);
@@ -295,13 +297,15 @@ export function applyAction(
         if(!hasPayment&&state.sales.some(s=>s.id===order.id))throw new StoreError("A sale already uses this order reference.");
         const due=paymentDue(order);
         const paidItems=order.items.map(item=>sliceItem(item,paidQuantity(order,item.id),item.qty-paidQuantity(order,item.id))).filter(item=>item.qty>0);
-        const amount=action.payment==="Friends & Family"?action.paidAmount:due;
+        const familyPayment=action.paidAmount!==undefined||action.payment==="Friends & Family";
+        if(familyPayment&&!isFriendsFamily(order))throw new StoreError("This order is not marked Friends & Family.",400);
+        const amount=familyPayment?action.paidAmount:due;
         if(amount===undefined||amount>due)throw new StoreError("Enter an amount between zero and the amount due.",400);
-        if(action.payment==="Friends & Family"){
+        if(familyPayment){
           let weight=0,allocated=0;
           for(const item of paidItems){weight+=itemTotal(item);const cumulative=due?Number(BigInt(amount)*BigInt(weight)/BigInt(due)):0;item.lineTotal=cumulative-allocated;allocated=cumulative;}
         }
-        order.paidAt=now;order.payment=action.payment;order.revision=(order.revision||0)+1;event(order,"Paid",action.actor,action.payment==="Friends & Family"?`Friends & Family: ${amount/100} paid; ${(due-amount)/100} discounted.`:action.payment==="UPI"?"Online payment recorded.":"Cash payment recorded.");
+        order.paidAt=now;order.payment=action.payment;order.revision=(order.revision||0)+1;event(order,"Paid",action.actor,familyPayment?`Friends & Family (${action.payment}): ${amount/100} paid; ${(due-amount)/100} discounted.`:action.payment==="UPI"?"Online payment recorded.":"Cash payment recorded.");
         state.sales.unshift({id:hasPayment?crypto.randomUUID():order.id,orderId:order.id,date:now,payment:action.payment,customer:order.customer,items:structuredClone(paidItems),total:amount,notes:order.notes,orderType:order.orderType,orderReference:order.orderReference||`Order #${order.number}`,business:order.business});
         order.paidQuantities=Object.fromEntries(order.items.map(i=>[i.id,i.qty]));
         order.paidTotal=(order.paidTotal||0)+amount;

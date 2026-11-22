@@ -3407,7 +3407,6 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 .chef-v2 .chef-order-fields{position:static;top:auto;overflow:visible;background:#efe2cf;border-bottom:2px solid #cfb99b;padding:16px 13px;margin-bottom:4px}
 .chef-v2 .chef-order-fields .order-tap-group>span,.chef-v2 .chef-order-fields .quick-choices>span{color:#6b5039}
 
-.friends-family-choice{width:100%;min-height:44px;margin-top:14px;border:1px solid #c7a783;background:#f3e5d4;color:#754520;border-radius:9px}
 .friends-family-form,.discard-reason{display:grid;gap:12px;margin:18px 0}
 .friends-family-form label,.discard-reason label{display:grid;gap:7px;font-size:12px}
 .friends-family-form input,.discard-reason textarea,.item-custom-dropdown select,.item-custom-dropdown input{width:100%;min-height:42px;padding:10px;border:1px solid #e0d2be;border-radius:8px;background:#fffdfa;color:#59371e;font:inherit}
@@ -3428,3 +3427,13 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 @keyframes queue-age-blink{0%,100%{opacity:1}50%{opacity:.3}}
 @media(max-width:700px){.queue-card-heading .queue-age-timer{align-self:flex-start}}
 @media(prefers-reduced-motion:reduce){.queue-age-timer.is-overdue{animation:none}.queue-age-progress{transition:none}}
+
+.queue-history-stats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:12px 0 18px}
+.queue-history-stats>div{display:flex;flex-direction:column;gap:8px;padding:14px;border:1px solid #dfcfbb;border-radius:10px;background:#f5ebdd;min-width:0}
+.queue-history-stats span{font-size:11px;color:#80654b}
+.queue-history-stats strong{font-size:20px;color:#3d291b;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+@media(max-width:700px){.queue-history-stats{grid-template-columns:repeat(2,minmax(0,1fr))}.queue-history-stats strong{font-size:18px}}
+
+.queue-card.is-friends-family:not(.order-status-discarded):not(.order-status-deleted){background:#f5eefb;border-color:#cbb6df;border-left:4px solid #a17abb}
+.payment-choices button[aria-pressed=true]{background:#ebd9f5;border-color:#a17abb}
+.order-amount .queue-order-time{white-space:nowrap}

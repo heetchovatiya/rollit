@@ -6,12 +6,13 @@ import type {StoreAction} from '@/lib/pos/validation';
 import {itemTotal} from '@/lib/pos/item-customization';
 import {money} from '@/lib/pos/format';
 import {DeliveryControls} from './delivery-controls';
-import {deliveryProgress,orderSummary,inActiveQueue,orderStatus,paymentDue,queueDayGroups,inCurrentQueue} from '@/lib/pos/delivery';
+import {deliveryProgress,orderSummary,inActiveQueue,orderStatus,paymentDue,queueDayGroups,inCurrentQueue,queueHistoryStats,isFriendsFamily} from '@/lib/pos/delivery';
 import {OrderEditor,type QueueProduct} from './order-editor';
 import {Dialog} from './dialog';
 import {QueueTimer} from './queue-timer';
 
-export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptions=[],mode="admin"}:{
+export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptions=[],orderPayments={},mode="admin"}:{
+ orderPayments?:Record<string,{online:number;offline:number}>;
  noteOptions?:string[];
  mode?:"admin"|"queue"|"manage";
  products?:QueueProduct[];
@@ -25,7 +26,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
  const [pay,setPay]=useState<KitchenOrder|null>(null);
  const [cancel,setCancel]=useState<KitchenOrder|null>(null);
  const [undoServed,setUndoServed]=useState<KitchenOrder|null>(null);
- const [friendForm,setFriendForm]=useState(false),[friendAmount,setFriendAmount]=useState(''),[discardReason,setDiscardReason]=useState('');
+ const [familyMethod,setFamilyMethod]=useState<'Cash'|'UPI'|''>(''),[friendAmount,setFriendAmount]=useState(''),[discardReason,setDiscardReason]=useState('');
  const [discard,setDiscard]=useState(false);
  const [historyFilter,setHistoryFilter]=useState('All');
  const [showHistory,setShowHistory]=useState(false);
@@ -33,7 +34,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
  const [working,setWorking]=useState(false);
  const [tick,setTick]=useState(Date.now());
  const [edit,setEdit]=useState<KitchenOrder|null>(null);
- useEffect(()=>{setFriendForm(false);setFriendAmount('')},[pay?.id,completePayment]);
+ useEffect(()=>{setFamilyMethod('');setFriendAmount('')},[pay?.id,completePayment]);
  const refreshRef=useRef(onRefresh);
  refreshRef.current=onRefresh;
  useEffect(()=>{
@@ -44,11 +45,12 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
  const active=orders.filter(inActiveQueue).sort((a,b)=>a.date.localeCompare(b.date));
  const allHistory=[...orders].sort((a,b)=>b.date.localeCompare(a.date));
  const history=allHistory.filter(order=>!inActiveQueue(order));
- const today=queueDayGroups(orders,tick);
- const rows=mode==='queue'?today.current:mode==='manage'
+ const queue=queueDayGroups(orders,tick);
+ const historyStats=queueHistoryStats(queue.history,orderPayments);
+ const rows=mode==='queue'?queue.current:mode==='manage'
   ?allHistory.filter(order=>historyFilter==='All'||orderStatus(order)===historyFilter)
   :showHistory?history:active;
- const count=mode==='queue'?today.current.length+today.history.length:rows.length;
+ const count=mode==='queue'?queue.current.length+queue.history.length:rows.length;
  const locked=busy||working;
 
  async function act(action:StoreAction){
@@ -74,7 +76,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
   const removed=!!order.cancelledAt||!!order.hiddenAt||!!order.deletedAt;
   const readonly=mode==='queue'&&!inCurrentQueue(order,tick);
   const hasPayment=!!order.paidAt||!!order.paidTotal||!!order.discountTotal;
-  return <article className={'queue-card order-status-'+status.toLowerCase()+' '+(open?'expanded':'')} key={order.id}>
+  return <article className={'queue-card order-status-'+status.toLowerCase()+' '+(open?'expanded':'')+(mode==='queue'&&isFriendsFamily(order)?' is-friends-family':'')} key={order.id}>
    <div className="queue-card-heading">
     <button className="queue-card-toggle" aria-expanded={open} aria-label={`Order ${order.number} details`} onClick={()=>setExpanded(open?null:order.id)}>
      <span className="order-token">#{order.number}</span>
@@ -88,7 +90,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
       <span className={order.givenAt?'status-done':'status-wait'}>{['Deleted','Discarded','Completed'].includes(status)?status:order.givenAt?'Served':progress.given>0?'Partly served':'Preparing'}</span>
       <span className={order.paidAt?'status-done':'status-unpaid'}>{order.paidAt?(order.payment==='Friends & Family'?`Friends & Family · ${money(order.paidTotal||0)}`:order.payment==='UPI'?'Online paid':'Cash paid'):(order.paidTotal||order.discountTotal)?`Due ${money(paymentDue(order))}`:'Unpaid'}</span>
      </span>
-     <span className="order-amount"><strong>{money(order.total)}</strong>{mode==='queue'&&!readonly?<QueueTimer date={order.date} now={tick} blinkAfterMinutes={40}/>:<small><Clock size={12}/>{(mode!=='admin'||showHistory)?new Date(order.date).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}):`${minutes} min`}</small>}</span>
+     <span className="order-amount"><strong>{money(order.total)}</strong>{mode==='queue'&&!readonly?<><QueueTimer date={order.date} now={tick} blinkAfterMinutes={40}/><small className="queue-order-time"><Clock size={12}/>{new Date(order.date).toLocaleTimeString('en-IN',{hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'})}</small></>:<small><Clock size={12}/>{(mode!=='admin'||showHistory)?new Date(order.date).toLocaleString('en-IN',{day:'numeric',month:'short',hour:'2-digit',minute:'2-digit',timeZone:'Asia/Kolkata'}):`${minutes} min`}</small>}</span>
      {open?<ChevronUp size={19}/>:<ChevronDown size={19}/>}
     </button>
     {!removed&&!readonly&&<div className="queue-row-actions">
@@ -125,7 +127,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
   </article>;
  }
  return <section className="order-queue">
-  <div className="queue-toolbar"><div><span className="brand-eyebrow">THE PASS</span><h2>{mode==='manage'?'Full order history':mode==='queue'?'Order queue':showHistory?'Order history':'Order queue'} <span className="queue-count">{count}</span></h2><p>{mode==='manage'?'All days, including discarded and deleted orders.':mode==='queue'?"Completed orders stay here for 30 seconds. Today's history is newest first.":showHistory?'Discarded, deleted and completed orders.':'Oldest first. Paid orders stay here until every item is served.'}</p></div><div className="queue-tools">
+  <div className="queue-toolbar"><div><span className="brand-eyebrow">THE PASS</span><h2>{mode==='manage'?'Full order history':mode==='queue'?'Order queue':showHistory?'Order history':'Order queue'} <span className="queue-count">{count}</span></h2><p>{mode==='manage'?'All days, including discarded and deleted orders.':mode==='queue'?"Completed orders stay here for 30 seconds. History shows the latest 50 orders from the last 24 hours.":showHistory?'Discarded, deleted and completed orders.':'Oldest first. Paid orders stay here until every item is served.'}</p></div><div className="queue-tools">
    {mode==='admin'&&<button onClick={()=>setShowHistory(!showHistory)}>{showHistory?'Back to queue':'History'}</button>}
    <button aria-label="Refresh queue" disabled={locked} onClick={()=>void onRefresh()}><RefreshCw size={18}/></button>
   </div></div>
@@ -133,14 +135,20 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
   {error&&<p role="alert" className="kitchen-error">{error}</p>}
   {mode==='queue'?<>
    <details className="queue-order-section" open>
-    <summary>Current orders <span>{today.current.length} orders</span></summary>
-    <div className="queue-list">{today.current.map(renderOrder)}</div>
-    {!today.current.length&&<div className="queue-empty"><Check size={34}/><h3>All caught up.</h3><p>Orders awaiting payment or serving appear here.</p></div>}
+    <summary>Current orders <span>{queue.current.length} orders</span></summary>
+    <div className="queue-list">{queue.current.map(renderOrder)}</div>
+    {!queue.current.length&&<div className="queue-empty"><Check size={34}/><h3>All caught up.</h3><p>Orders awaiting payment or serving appear here.</p></div>}
    </details>
    <details className="queue-order-section">
-    <summary>History <span>{today.history.length} orders today</span></summary>
-    <div className="queue-list">{today.history.map(renderOrder)}</div>
-    {!today.history.length&&<div className="queue-empty"><h3>No history today.</h3></div>}
+    <summary>History <span>{queue.history.length} orders · last 24 hours</span></summary>
+    <div className="queue-history-stats" role="group" aria-label="History quick stats">
+     <div><span>Paid orders</span><strong>{historyStats.paidOrders}</strong></div>
+     <div><span>Discarded orders</span><strong>{historyStats.discardedOrders}</strong></div>
+     <div><span>Online received (UPI)</span><strong>{money(historyStats.onlineReceived)}</strong></div>
+     <div><span>Offline received (cash)</span><strong>{money(historyStats.offlineReceived)}</strong></div>
+    </div>
+    <div className="queue-list">{queue.history.map(renderOrder)}</div>
+    {!queue.history.length&&<div className="queue-empty"><h3>No history in the last 24 hours.</h3></div>}
    </details>
   </>:<>
    <div className="queue-list">{rows.map(renderOrder)}</div>
@@ -148,18 +156,18 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
   </>}
   {edit&&<OrderEditor noteOptions={noteOptions} order={edit} products={products} busy={locked} error={error} onClose={()=>setEdit(null)} onSave={act}/>}
   {undoServed&&<Dialog label="Confirm undo served" onClose={()=>{if(!locked)setUndoServed(null)}}><div className="payment-dialog"><h2>Untick served for order #{undoServed.number}?</h2><p>All items will be marked unserved. A completed order will return to the active queue.</p><button className="brand-primary" disabled={locked} onClick={async()=>{if(await act({type:'orderUnserved',id:undoServed.id,originalRevision:undoServed.revision||0}))setUndoServed(null)}}>Yes, untick served</button><button type="button" disabled={locked} onClick={()=>setUndoServed(null)}>Keep served</button>{error&&<p role="alert" className="kitchen-error">{error}</p>}</div></Dialog>}
-  {pay&&<Dialog label={completePayment?'Confirm served and paid':pay.paidAt?'Change recorded payment':'Record payment'} onClose={()=>{if(!locked)setPay(null)}}><div className="payment-dialog">
+  {pay&&<Dialog label={isFriendsFamily(pay)?'Friends & Family payment':completePayment?'Confirm served and paid':pay.paidAt?'Change recorded payment':'Record payment'} onClose={()=>{if(!locked)setPay(null)}}><div className="payment-dialog">
    <button className="dialog-x" disabled={locked} onClick={()=>setPay(null)} aria-label="Close payment"><X/></button>
    <span className="brand-eyebrow">ORDER #{pay.number}</span>
    <h2>{completePayment?'Mark served and paid?':pay.paidAt?'Change recorded payment?':'How was it paid?'}</h2>
    <p className="payment-total">{money(pay.paidAt?pay.total:paymentDue(pay))}</p>
    <p>{completePayment?'Confirm the payment mode to mark every item served and the order paid.':pay.paidAt?'Confirm a different payment mode, or mark the order unpaid.':pay.paidTotal?`Already paid ${money(pay.paidTotal)}. Collect the remaining balance.`:'Choose the payment received.'}</p>
-   <div className="payment-choices">{(['UPI','Cash'] as const).map(payment=><button key={payment} disabled={locked||(!completePayment&&!!pay.paidAt&&pay.payment===payment)} onClick={async()=>{
+   <div className="payment-choices">{(['UPI','Cash'] as const).map(payment=><button key={payment} disabled={locked||(!isFriendsFamily(pay)&&!completePayment&&!!pay.paidAt&&pay.payment===payment)} aria-pressed={isFriendsFamily(pay)?familyMethod===payment:undefined} onClick={async()=>{
+    if(isFriendsFamily(pay)){setFamilyMethod(payment);return;}
     const action:StoreAction=completePayment?{type:'orderComplete',id:pay.id,payment,originalRevision:pay.revision||0}:pay.paidAt?{type:'orderPayment',id:pay.id,payment,originalRevision:pay.revision||0}:{type:'orderPaid',id:pay.id,payment,originalRevision:pay.revision||0};
     if(await act(action))setPay(null);
-   }}>{payment==='UPI'?<CreditCard/>:<Banknote/>}<strong>{payment==='UPI'?'Online':'Cash'}</strong><small>{completePayment?'Confirm served and paid':pay.paidAt?pay.payment===payment?'Current mode':'Change to this mode':payment==='UPI'?'UPI / online transfer':'Cash received'}</small></button>)}</div>
-   <button type="button" className="friends-family-choice" disabled={locked} onClick={()=>{setFriendForm(true);setFriendAmount('')}}>Friends &amp; Family</button>
-   {friendForm&&<form className="friends-family-form" onSubmit={async event=>{event.preventDefault();if(await act({type:'orderFriendsFamily',id:pay.id,originalRevision:pay.revision||0,paidAmount:Math.round(Number(friendAmount)*100),serve:completePayment}))setPay(null)}}><label>How much was paid? (₹)<input autoFocus type="number" min="0" max={pay.total/100} step="0.01" required disabled={locked} value={friendAmount} onChange={event=>setFriendAmount(event.target.value)} placeholder="0"/></label><p>Enter ₹0 for a complimentary order. The remainder is recorded as a discount and the order is settled.</p><button className="brand-primary" disabled={locked}>Confirm Friends &amp; Family payment</button></form>}
+   }}>{payment==='UPI'?<CreditCard/>:<Banknote/>}<strong>{payment==='UPI'?'Online':'Cash'}</strong><small>{isFriendsFamily(pay)?familyMethod===payment?'Selected':'Choose payment mode':completePayment?'Confirm served and paid':pay.paidAt?pay.payment===payment?'Current mode':'Change to this mode':payment==='UPI'?'UPI / online transfer':'Cash received'}</small></button>)}</div>
+   {isFriendsFamily(pay)&&<form className="friends-family-form" onSubmit={async event=>{event.preventDefault();if(!familyMethod)return;if(await act({type:'orderFriendsFamily',id:pay.id,payment:familyMethod,originalRevision:pay.revision||0,paidAmount:Math.round(Number(friendAmount)*100),serve:completePayment}))setPay(null)}}><label>Amount received (₹)<input type="number" min="0" max={pay.total/100} step="0.01" required disabled={locked} value={friendAmount} onChange={event=>setFriendAmount(event.target.value)} placeholder="0"/></label><p>Choose Cash or Online above, then enter the amount received. ₹0 is allowed. The remainder is recorded as a Friends &amp; Family discount.</p><button className="brand-primary" disabled={locked||!familyMethod}>{completePayment?'Confirm served and paid':'Confirm payment'}</button></form>}
    {!completePayment&&(pay.paidAt||!!pay.paidTotal||!!pay.discountTotal)&&<button type="button" className="payment-unpay" disabled={locked} onClick={async()=>{if(await act({type:'orderPayment',id:pay.id,payment:'Unpaid',originalRevision:pay.revision||0}))setPay(null)}}>Confirm mark unpaid</button>}
    {!completePayment&&(pay.paidAt||!!pay.paidTotal||!!pay.discountTotal)&&<p>Unpay removes the recorded payment from sales totals and keeps a correction record.</p>}
    <small>This records payment received; it does not collect payment.</small>

@@ -1,5 +1,5 @@
-import {businessDay} from './business-day';
-import type {KitchenOrder} from './types';
+import {businessDay,DAY_MS} from './business-day';
+import type {KitchenOrder,Sale} from './types';
 export function deliveredQuantity(order:KitchenOrder,productId:string){
  const item=order.items.find(i=>i.id===productId);
  if(!item)return 0;
@@ -36,10 +36,44 @@ export function paidQuantity(order:KitchenOrder,productId:string){
 export function paymentDue(order:KitchenOrder){return Math.max(0,order.total-(order.paidTotal??(order.paidAt?order.total:0))-(order.discountTotal||0))}
 
 export function queueDayGroups(orders:KitchenOrder[],now=Date.now()){
- const today=businessDay(now);
+ const cutoff=now-DAY_MS;
  return {
   current:orders.filter(order=>inCurrentQueue(order,now)).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date)),
-  history:orders.filter(order=>!inCurrentQueue(order,now)&&businessDay(order.date)===today)
-   .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)),
+  history:orders.filter(order=>!inCurrentQueue(order,now)&&Date.parse(order.date)>=cutoff&&Date.parse(order.date)<=now)
+   .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,50),
  };
+}
+
+export function orderPaymentTotals(orders:KitchenOrder[],sales:Sale[]){
+ const totals:Record<string,{online:number;offline:number}>={};
+ const ids=new Set(orders.map(order=>order.id));
+ const byPaidDate=new Map<string,Set<KitchenOrder>>();
+ for(const order of orders)for(const event of order.events||[]){
+  if(event.action==='Paid'){const group=byPaidDate.get(event.at)||new Set<KitchenOrder>();group.add(order);byPaidDate.set(event.at,group);}
+ }
+ for(const sale of sales){
+  if(sale.returnedAt)continue;
+  let id=sale.orderId||(ids.has(sale.id)?sale.id:undefined);
+  if(!id){
+   const candidates=[...(byPaidDate.get(sale.date)||[])].filter(order=>sale.items.every(item=>order.items.some(line=>line.id===item.id&&line.price===item.price)));
+   if(candidates.length===1)id=candidates[0].id;
+  }
+  if(!id)continue;
+  const total=totals[id]||={online:0,offline:0};
+  if(sale.payment==='UPI')total.online+=sale.total;
+  if(sale.payment==='Cash')total.offline+=sale.total;
+ }
+ return totals;
+}
+export function queueHistoryStats(orders:KitchenOrder[],payments:Record<string,{online:number;offline:number}>){
+ return orders.reduce((stats,order)=>({
+  paidOrders:stats.paidOrders+(order.paidAt?1:0),
+  discardedOrders:stats.discardedOrders+(order.discardedAt||order.events?.some(event=>event.action==='Discarded')?1:0),
+  onlineReceived:stats.onlineReceived+(payments[order.id]?.online||0),
+  offlineReceived:stats.offlineReceived+(payments[order.id]?.offline||0),
+ }),{paidOrders:0,discardedOrders:0,onlineReceived:0,offlineReceived:0});
+}
+
+export function isFriendsFamily(order:KitchenOrder){
+ return !!order.friendsAndFamily||order.customer==='Friends & Family'||order.payment==='Friends & Family'||!!order.discountTotal;
 }

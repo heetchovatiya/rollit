@@ -98,7 +98,7 @@ export const actionSchema = z.discriminatedUnion("type", [
   z.object({type:z.literal("orderDelivery"),actor:z.string().max(120).optional(),id,productId:id,deliveredQty:quantity,expectedDelivered:quantity}),
   z.object({type:z.literal("orderPayment"),manage:z.boolean().optional(),actor:z.string().max(120).optional(),id,originalRevision:z.number().int().nonnegative(),payment:z.enum(["Unpaid","Cash","UPI"])}),
   z.object({type:z.literal("orderComplete"),manage:z.boolean().optional(),actor:z.string().max(120).optional(),id,originalRevision:z.number().int().nonnegative(),payment:z.enum(["Cash","UPI"])}),
-  z.object({type:z.literal("orderFriendsFamily"),manage:z.boolean().optional(),actor:z.string().max(120).optional(),id,originalRevision:z.number().int().nonnegative(),paidAmount:cents,serve:z.boolean().optional()}),
+  z.object({type:z.literal("orderFriendsFamily"),manage:z.boolean().optional(),actor:z.string().max(120).optional(),id,originalRevision:z.number().int().nonnegative(),payment:z.enum(["Cash","UPI"]).optional(),paidAmount:cents,serve:z.boolean().optional()}),
   z.object({type:z.literal("orderPaid"),paidAmount:cents.optional(),originalRevision:z.number().int().nonnegative().optional(),actor:z.string().max(120).optional(),id,payment:z.enum(["Cash","UPI","Friends & Family"])}),
   z.object({type:z.literal("cancelOrder"),actor:z.string().max(120).optional(),id,reason:z.string().trim().min(3).max(240).default("Order deleted")}),
   z.object({

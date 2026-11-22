@@ -91,7 +91,7 @@ export async function handleAuth(request,env,user){
  }
  return json({error:'Not found.'},404);
 }
-export function chefState(s){return {products:s.products.filter(p=>!p.archived).map(({id,name,sku,category,price,stock})=>({id,name,sku,category,price,stock})),orders:(s.orders||[]).map(o=>({...o,items:o.items.map(({cost,ingredientUsage,...item})=>item)})),settings:{menuOrder:s.settings.menuOrder||[],businessName:s.settings.businessName,defaultOrderType:s.settings.defaultOrderType||"Dine-in",quickCustomers:s.settings.quickCustomers||["Walk-in customer"],quickKitchenNotes:s.settings.quickKitchenNotes||["Less spicy","Spicy","No onion","No capsicum"]}};}
+export function chefState(s){return {orderPayments:s.orderPayments||{},products:s.products.filter(p=>!p.archived).map(({id,name,sku,category,price,stock})=>({id,name,sku,category,price,stock})),orders:(s.orders||[]).map(o=>({...o,items:o.items.map(({cost,ingredientUsage,...item})=>item)})),settings:{menuOrder:s.settings.menuOrder||[],businessName:s.settings.businessName,defaultOrderType:s.settings.defaultOrderType||"Dine-in",quickCustomers:s.settings.quickCustomers||["Walk-in customer"],quickKitchenNotes:s.settings.quickKitchenNotes||["Less spicy","Spicy","No onion","No capsicum"]}};}
 export function mayChefAccess(path,method,action){
  if(path==='/chef'||path.startsWith('/_next/static/')||path==='/rollit-logo.jpg'||path==='/favicon.svg'||path.startsWith('/menu-art/'))return method==='GET';
  if(path==='/api/pos')return method==='GET'||method==='POST'&&['createOrder','orderFriendsFamily','orderPayment','orderComplete','orderUnserved','orderGiven','orderPaid','cancelOrder','discardOrder','orderDelivery','editOrder','archiveOrder'].includes(action);

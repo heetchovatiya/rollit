@@ -1004,7 +1004,7 @@ test('undo served rejects deleted and discarded orders',()=>{
  assert.throws(()=>applyAction(s,{type:'orderUnserved',id:saleId,originalRevision:s.orders[0].revision}),/discarded or deleted/);
 });
 const {queueDayGroups}=await import(pathToFileURL(join(temp,'delivery.mjs')));
-test('queue keeps all pending orders current and today history newest first',()=>{
+test('queue keeps pending orders current and rolling-day history newest first',()=>{
  const now=Date.parse('2026-11-21T10:00:00+05:30');
  const sample=(id,date,extra={})=>({id,date,...extra});
  const paidAt='2026-11-21T09:45:00+05:30',givenAt=paidAt;
@@ -1020,16 +1020,16 @@ test('queue keeps all pending orders current and today history newest first',()=
   sample('discarded','2026-11-21T09:40:00+05:30',{cancelledAt:paidAt}),
  ],now);
  assert.deepEqual(groups.current.map(order=>order.id),['old-pending','unpaid','unserved','both-pending']);
- assert.deepEqual(groups.history.map(order=>order.id),['discarded','deleted','completed-last','completed-first']);
+ assert.deepEqual(groups.history.map(order=>order.id),['discarded','deleted','completed-last','completed-first','old-complete']);
 });
-test('queue history follows India midnight and sorts by timestamps across offsets',()=>{
+test('queue history carries across midnight and sorts timestamps across offsets',()=>{
  const sample=(id,date)=>({id,date,paidAt:date,givenAt:date});
  const groups=queueDayGroups([
   sample('yesterday','2026-11-20T23:59:59+05:30'),
   sample('midnight','2026-11-21T00:00:00+05:30'),
   sample('utc-later','2026-11-20T18:45:00Z'),
  ],Date.parse('2026-11-21T00:30:00+05:30'));
- assert.deepEqual(groups.history.map(order=>order.id),['utc-later','midnight']);
+ assert.deepEqual(groups.history.map(order=>order.id),['utc-later','midnight','yesterday']);
  assert.deepEqual(groups.current,[]);
 });
 
@@ -1197,11 +1197,12 @@ test('extras support ten or twenty rupees without changing other items or accept
 const {itemTotal}=await import(pathToFileURL(join(temp,'item-customization.mjs')));
 test('Friends and Family settles for a custom amount or zero and reports only money received',()=>{
  for(const amount of [0,2500]){
-  let s=applyAction(normalizeState(state()),orderAction());
-  const action=actionSchema.parse({type:'orderFriendsFamily',id:saleId,originalRevision:0,paidAmount:amount});
+  let s=applyAction(normalizeState(state()),{...orderAction(),customer:'Friends & Family'});
+  const action=actionSchema.parse({type:'orderFriendsFamily',id:saleId,originalRevision:0,paidAmount:amount,payment:amount===0?'Cash':'UPI'});
   s=applyAction(s,action);
   assert.ok(s.orders[0].paidAt);
-  assert.equal(s.orders[0].payment,'Friends & Family');
+  assert.equal(s.orders[0].payment,action.payment);
+  assert.equal(s.orders[0].friendsAndFamily,true);
   assert.equal(s.orders[0].paidTotal,amount);
   assert.equal(s.orders[0].discountTotal,10000-amount);
   assert.equal(s.sales[0].total,amount);
@@ -1218,11 +1219,11 @@ test('Friends and Family settles for a custom amount or zero and reports only mo
  }
 });
 test('Friends and Family corrects existing payments atomically and handles extra items later',()=>{
- let s=applyAction(normalizeState(state()),orderAction());
+ let s=applyAction(normalizeState(state()),{...orderAction(),customer:'Friends & Family'});
  s=applyAction(s,{type:'orderPaid',id:saleId,payment:'Cash'});
  assert.throws(()=>applyAction(s,{type:'orderFriendsFamily',id:saleId,originalRevision:0,paidAmount:0}),/changed/);
  assert.throws(()=>applyAction(s,{type:'orderFriendsFamily',id:saleId,originalRevision:s.orders[0].revision,paidAmount:10001}),/exceed/);
- s=applyAction(s,{type:'orderFriendsFamily',id:saleId,originalRevision:s.orders[0].revision,paidAmount:2000});
+ s=applyAction(s,{type:'orderFriendsFamily',id:saleId,originalRevision:s.orders[0].revision,paidAmount:2000,payment:'Cash'});
  assert.equal(s.sales.length,1);
  assert.equal(s.voidedSales.length,1);
  s=applyAction(s,editKitchen(s.orders[0],{items:[{id:pId,qty:3,expectedPrice:5000}]}));
@@ -1293,4 +1294,46 @@ test('queue timer colors follow ten-minute bands and its ring counts down thirty
  assert.equal(queueTimer(date,start-60000,40).remaining,1);
  assert.equal(queueTimer('invalid',start,40).label,'0:00');
  assert.notEqual(at(2).color,at(8).color);
+});
+
+const {orderPaymentTotals,queueHistoryStats,isFriendsFamily}=await import(pathToFileURL(join(temp,'delivery.mjs')));
+test('history keeps the latest fifty orders inside a full rolling day',()=>{
+ const now=Date.parse('2026-11-22T10:00:00Z');
+ const rows=Array.from({length:60},(_,index)=>({id:String(index),date:new Date(now-(index+1)*60000).toISOString(),paidAt:new Date(now-60000).toISOString(),givenAt:new Date(now-60000).toISOString()}));
+ rows.push({id:'expired',date:new Date(now-86400001).toISOString(),cancelledAt:new Date(now-50000).toISOString()});
+ rows.push({id:'old-pending',date:new Date(now-86400001).toISOString()});
+ const grouped=queueDayGroups(rows,now);
+ assert.equal(grouped.history.length,50);
+ assert.deepEqual(grouped.history.map(order=>order.id),Array.from({length:50},(_,index)=>String(index)));
+ assert.deepEqual(grouped.current.map(order=>order.id),['old-pending']);
+ const boundary=queueDayGroups([{id:'boundary',date:new Date(now-86400000).toISOString(),cancelledAt:new Date(now-60000).toISOString()}],now);
+ assert.equal(boundary.history.length,1);
+});
+test('history stats use actual split receipts and count zero-value family settlements',()=>{
+ const date='2026-11-22T09:00:00Z';
+ const orders=[{id:'split',paidAt:date,date,items:[]},{id:'gift',paidAt:date,discountTotal:5000,date,items:[]},{id:'discard',discardedAt:date,date,items:[]},{id:'unpaid',date,items:[]}];
+ const sales=[{id:'split',payment:'Cash',total:2000,items:[],date},{id:'extra',orderId:'split',payment:'UPI',total:500,items:[],date},{id:'gift',orderId:'gift',payment:'Cash',total:0,items:[],date},{id:'refund',orderId:'split',payment:'Cash',total:1000,returnedAt:date,items:[],date}];
+ const payments=orderPaymentTotals(orders,sales);
+ assert.deepEqual(queueHistoryStats(orders,payments),{paidOrders:2,discardedOrders:1,onlineReceived:500,offlineReceived:2000});
+ assert.deepEqual(queueHistoryStats([orders[1],orders[2]],payments),{paidOrders:1,discardedOrders:1,onlineReceived:0,offlineReceived:0});
+});
+test('legacy extra receipts are attributed by unique paid activity without duplicate counting',()=>{
+ const date='2026-11-22T09:00:00Z';
+ const order={id:'old',items:[{id:pId,price:5000}],events:[{action:'Paid',at:date},{action:'Paid',at:date}]};
+ const totals=orderPaymentTotals([order],[{id:'old',payment:'Cash',total:5000,date,items:[]},{id:'legacy-extra',payment:'UPI',total:5000,date,items:[{id:pId,price:5000}]}]);
+ assert.deepEqual(totals.old,{offline:5000,online:5000});
+});
+test('family classification is selected at order placement and settles using cash or online',()=>{
+ let s=applyAction(normalizeState(state()),{...orderAction(),customer:'Friends & Family'});
+ assert.equal(isFriendsFamily(s.orders[0]),true);
+ assert.equal(s.orders[0].paidAt,undefined);
+ s=applyAction(s,{type:'orderFriendsFamily',payment:'Cash',id:saleId,originalRevision:0,paidAmount:0,serve:true});
+ assert.ok(s.orders[0].completedAt);
+ assert.equal(s.sales[0].payment,'Cash');
+ assert.equal(s.sales[0].total,0);
+ assert.equal(s.orders[0].discountTotal,10000);
+ assert.equal(isFriendsFamily(s.orders[0]),true);
+ const regular=applyAction(normalizeState(state()),orderAction());
+ assert.throws(()=>applyAction(regular,{type:'orderFriendsFamily',payment:'UPI',id:saleId,originalRevision:0,paidAmount:0}),/customer type/);
+ assert.throws(()=>applyAction(regular,{type:'orderPaid',payment:'UPI',id:saleId,originalRevision:0,paidAmount:0}),/not marked/);
 });

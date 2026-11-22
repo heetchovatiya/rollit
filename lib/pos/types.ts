@@ -89,6 +89,7 @@ export interface TrackedBill {
 }
 export interface OrderEvent {id:string;action:"Created"|"Edited"|"Deleted"|"Discarded"|"Served"|"Paid";at:string;by:string;details:string}
 export interface KitchenOrder {
+  friendsAndFamily?:boolean;
   businessDay?:string;
   discardedAt?:string;
   deletedAt?:string;

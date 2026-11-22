@@ -1,6 +1,8 @@
 import { env } from "cloudflare:workers";
 import { actionSchema } from "@/lib/pos/validation";
 import { commitAction, readState } from "@/lib/pos/repository";
+import {orderPaymentTotals} from "@/lib/pos/delivery";
+import type {StoreState} from "@/lib/pos/types";
 import { StoreError } from "@/lib/pos/service";
 export const dynamic = "force-dynamic";
 const reply = (value: unknown, status = 200) =>
@@ -8,10 +10,11 @@ const reply = (value: unknown, status = 200) =>
     status,
     headers: { "Cache-Control": "private, no-store" },
   });
+const responseState=(state:StoreState)=>({...state,orderPayments:orderPaymentTotals(state.orders,state.sales)});
 export async function GET() {
   try {
     if (!env.DB) throw new Error("Database unavailable");
-    return reply(await readState(env.DB));
+    return reply(responseState(await readState(env.DB)));
   } catch (error) {
     console.error("POS read failed", error);
     return reply({ error: "Unable to load the store. Please try again." }, 503);
@@ -60,7 +63,7 @@ export async function POST(request: Request) {
       if (action.type === "trackedBill")
         action.bill.attachmentType = stored.httpMetadata?.contentType;
     }
-    return reply(await commitAction(env.DB, parsed.data));
+    return reply(responseState(await commitAction(env.DB, parsed.data)));
   } catch (error) {
     if (error instanceof StoreError)
       return reply({ error: error.message }, error.status);
