@@ -1,4 +1,4 @@
-import {businessDay,DAY_MS} from './business-day';
+import {businessDay} from './business-day';
 import type {KitchenOrder,Sale} from './types';
 export function deliveredQuantity(order:KitchenOrder,productId:string){
  const item=order.items.find(i=>i.id===productId);
@@ -36,11 +36,13 @@ export function paidQuantity(order:KitchenOrder,productId:string){
 export function paymentDue(order:KitchenOrder){return Math.max(0,order.total-(order.paidTotal??(order.paidAt?order.total:0))-(order.discountTotal||0))}
 
 export function queueDayGroups(orders:KitchenOrder[],now=Date.now()){
- const cutoff=now-DAY_MS;
+ const today=businessDay(now);
+ const history=orders.filter(order=>!inCurrentQueue(order,now)&&Date.parse(order.date)<=now)
+  .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date));
+ const todayCount=history.filter(order=>businessDay(order.date)===today).length;
  return {
   current:orders.filter(order=>inCurrentQueue(order,now)).sort((a,b)=>Date.parse(a.date)-Date.parse(b.date)),
-  history:orders.filter(order=>!inCurrentQueue(order,now)&&Date.parse(order.date)>=cutoff&&Date.parse(order.date)<=now)
-   .sort((a,b)=>Date.parse(b.date)-Date.parse(a.date)).slice(0,50),
+  history:history.slice(0,Math.max(50,todayCount)),
  };
 }
 

@@ -1004,7 +1004,7 @@ test('undo served rejects deleted and discarded orders',()=>{
  assert.throws(()=>applyAction(s,{type:'orderUnserved',id:saleId,originalRevision:s.orders[0].revision}),/discarded or deleted/);
 });
 const {queueDayGroups}=await import(pathToFileURL(join(temp,'delivery.mjs')));
-test('queue keeps pending orders current and rolling-day history newest first',()=>{
+test('queue keeps pending orders current and history newest first',()=>{
  const now=Date.parse('2026-11-21T10:00:00+05:30');
  const sample=(id,date,extra={})=>({id,date,...extra});
  const paidAt='2026-11-21T09:45:00+05:30',givenAt=paidAt;
@@ -1297,17 +1297,28 @@ test('queue timer colors follow ten-minute bands and its ring counts down thirty
 });
 
 const {orderPaymentTotals,queueHistoryStats,isFriendsFamily}=await import(pathToFileURL(join(temp,'delivery.mjs')));
-test('history keeps the latest fifty orders inside a full rolling day',()=>{
+test('history keeps every order today even when there are more than fifty',()=>{
  const now=Date.parse('2026-11-22T10:00:00Z');
- const rows=Array.from({length:60},(_,index)=>({id:String(index),date:new Date(now-(index+1)*60000).toISOString(),paidAt:new Date(now-60000).toISOString(),givenAt:new Date(now-60000).toISOString()}));
- rows.push({id:'expired',date:new Date(now-86400001).toISOString(),cancelledAt:new Date(now-50000).toISOString()});
- rows.push({id:'old-pending',date:new Date(now-86400001).toISOString()});
+ const rows=Array.from({length:70},(_,index)=>({id:String(index),date:new Date(now-(index+1)*60000).toISOString(),cancelledAt:new Date(now-60000).toISOString()}));
+ rows.push({id:'older',date:new Date(now-2*86400000).toISOString(),cancelledAt:new Date(now-60000).toISOString()});
+ rows.push({id:'old-pending',date:new Date(now-2*86400000).toISOString()});
  const grouped=queueDayGroups(rows,now);
- assert.equal(grouped.history.length,50);
- assert.deepEqual(grouped.history.map(order=>order.id),Array.from({length:50},(_,index)=>String(index)));
+ assert.equal(grouped.history.length,70);
+ assert.deepEqual(grouped.history.map(order=>order.id),Array.from({length:70},(_,index)=>String(index)));
  assert.deepEqual(grouped.current.map(order=>order.id),['old-pending']);
- const boundary=queueDayGroups([{id:'boundary',date:new Date(now-86400000).toISOString(),cancelledAt:new Date(now-60000).toISOString()}],now);
- assert.equal(boundary.history.length,1);
+});
+test('history extends into older days to show the recent fifty when today has fewer',()=>{
+ const now=Date.parse('2026-11-22T10:00:00Z');
+ const recent=[{id:'today-one',date:new Date(now-60000).toISOString(),cancelledAt:new Date(now-60000).toISOString()},{id:'today-two',date:new Date(now-120000).toISOString(),cancelledAt:new Date(now-60000).toISOString()}];
+ const older=Array.from({length:80},(_,index)=>({id:'old-'+index,date:new Date(now-2*86400000-index*60000).toISOString(),cancelledAt:new Date(now-60000).toISOString()}));
+ const grouped=queueDayGroups([...older,...recent],now);
+ assert.equal(grouped.history.length,50);
+ assert.deepEqual(grouped.history.slice(0,2).map(order=>order.id),['today-one','today-two']);
+ assert.equal(grouped.history.at(-1).id,'old-47');
+ const midnight=Date.parse('2026-11-21T18:30:00Z');
+ const todayRows=Array.from({length:60},(_,index)=>({id:String(index),date:new Date(midnight+index*1000).toISOString(),cancelledAt:new Date(midnight+60000).toISOString()}));
+ assert.equal(queueDayGroups(todayRows,midnight+120000).history.length,60);
+ assert.equal(queueDayGroups([],now).history.length,0);
 });
 test('history stats use actual split receipts and count zero-value family settlements',()=>{
  const date='2026-11-22T09:00:00Z';

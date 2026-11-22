@@ -127,7 +127,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
   </article>;
  }
  return <section className="order-queue">
-  <div className="queue-toolbar"><div><span className="brand-eyebrow">THE PASS</span><h2>{mode==='manage'?'Full order history':mode==='queue'?'Order queue':showHistory?'Order history':'Order queue'} <span className="queue-count">{count}</span></h2><p>{mode==='manage'?'All days, including discarded and deleted orders.':mode==='queue'?"Completed orders stay here for 30 seconds. History shows the latest 50 orders from the last 24 hours.":showHistory?'Discarded, deleted and completed orders.':'Oldest first. Paid orders stay here until every item is served.'}</p></div><div className="queue-tools">
+  <div className="queue-toolbar"><div><span className="brand-eyebrow">THE PASS</span><h2>{mode==='manage'?'Full order history':mode==='queue'?'Order queue':showHistory?'Order history':'Order queue'} <span className="queue-count">{count}</span></h2><p>{mode==='manage'?'All days, including discarded and deleted orders.':mode==='queue'?"Completed orders stay here for 30 seconds. History shows all of today's orders or the latest 50, whichever is more.":showHistory?'Discarded, deleted and completed orders.':'Oldest first. Paid orders stay here until every item is served.'}</p></div><div className="queue-tools">
    {mode==='admin'&&<button onClick={()=>setShowHistory(!showHistory)}>{showHistory?'Back to queue':'History'}</button>}
    <button aria-label="Refresh queue" disabled={locked} onClick={()=>void onRefresh()}><RefreshCw size={18}/></button>
   </div></div>
@@ -140,7 +140,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
     {!queue.current.length&&<div className="queue-empty"><Check size={34}/><h3>All caught up.</h3><p>Orders awaiting payment or serving appear here.</p></div>}
    </details>
    <details className="queue-order-section">
-    <summary>History <span>{queue.history.length} orders · last 24 hours</span></summary>
+    <summary>History <span>{queue.history.length} orders · today or latest 50</span></summary>
     <div className="queue-history-stats" role="group" aria-label="History quick stats">
      <div><span>Paid orders</span><strong>{historyStats.paidOrders}</strong></div>
      <div><span>Discarded orders</span><strong>{historyStats.discardedOrders}</strong></div>
@@ -148,7 +148,7 @@ export function OrderQueue({orders,products=[],busy,onAction,onRefresh,noteOptio
      <div><span>Offline received (cash)</span><strong>{money(historyStats.offlineReceived)}</strong></div>
     </div>
     <div className="queue-list">{queue.history.map(renderOrder)}</div>
-    {!queue.history.length&&<div className="queue-empty"><h3>No history in the last 24 hours.</h3></div>}
+    {!queue.history.length&&<div className="queue-empty"><h3>No history yet.</h3></div>}
    </details>
   </>:<>
    <div className="queue-list">{rows.map(renderOrder)}</div>
