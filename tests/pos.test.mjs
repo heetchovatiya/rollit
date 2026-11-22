@@ -12,6 +12,7 @@ for (const name of [
   "item-customization",
   "business-day",
   "cart",
+  "queue-timer",
   "menu-images",
   "recipes",
   "chef-gesture",
@@ -1268,4 +1269,28 @@ test('invalid unit numbers and duplicate customizations are rejected',()=>{
  const action={...orderAction(),items:[{id:pId,qty:2,expectedPrice:5000,unitCustomizations:[{unit:3,notes:'Spicy',extraPrice:1000}]}]};
  assert.throws(()=>applyAction(normalizeState(state()),actionSchema.parse(action)),/exceeds/);
  assert.equal(actionSchema.safeParse({...action,items:[{...action.items[0],unitCustomizations:[{unit:1,notes:'',extraPrice:0},{unit:1,notes:'',extraPrice:1000}]}]}).success,false);
+});
+
+const {queueTimer}=await import(pathToFileURL(join(temp,'queue-timer.mjs')));
+test('queue timer colors follow ten-minute bands and its ring counts down thirty minutes',()=>{
+ const date='2026-11-22T10:00:00.000Z',start=Date.parse(date);
+ const at=minutes=>queueTimer(date,start+minutes*60000,40);
+ assert.equal(at(0).tone,'green');
+ assert.equal(at(9.99).tone,'green');
+ assert.equal(at(10).tone,'yellow');
+ assert.equal(at(19.99).tone,'yellow');
+ assert.equal(at(20).tone,'red');
+ assert.equal(at(0).remaining,1);
+ assert.equal(at(15).remaining,.5);
+ assert.equal(at(30).remaining,0);
+ assert.equal(at(60).remaining,0);
+ assert.equal(at(39.99).blinking,false);
+ assert.equal(at(40).blinking,true);
+ assert.equal(queueTimer(date,start+30*60000,30).blinking,true);
+ assert.equal(queueTimer(date,start+29.99*60000,30).blinking,false);
+ assert.equal(at(1.5).label,'1:30');
+ assert.equal(at(60).label,'1h');
+ assert.equal(queueTimer(date,start-60000,40).remaining,1);
+ assert.equal(queueTimer('invalid',start,40).label,'0:00');
+ assert.notEqual(at(2).color,at(8).color);
 });

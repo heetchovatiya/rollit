@@ -3369,7 +3369,6 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 
 .queue-row-actions{flex-wrap:wrap;justify-content:flex-end}
 .queue-complete-control{display:flex;align-items:center;justify-content:center;gap:6px;min-height:46px;border:1px solid #dfc9ad;border-radius:10px;background:#fff7eb;color:#8a5b32;padding:10px;font-size:11px;font-weight:600}
-.queue-history-countdown{font-size:10px;color:var(--muted);white-space:nowrap}
 .payment-unpay{width:100%;min-height:46px;margin-top:18px;border:1px solid #b86f55;background:#fff3ed;color:#853e2b;border-radius:9px}
 .menu-tile{position:relative}
 .chef-app .menu-tile-minus{position:absolute;top:6px;left:6px;z-index:2;width:36px;min-height:36px;display:grid;place-items:center;padding:0;border:1px solid #ddc2a2;border-radius:7px;background:#fffaf2ed;color:#9f5729}
@@ -3417,3 +3416,15 @@ html:has(.chef-app) { overscroll-behavior-x: none; }
 .discard-reason>div>button[aria-pressed=true]{background:#ebd0ad;border-color:#b77443}
 
 .payment-fill.fill-3{background:#9c6f91}
+
+.queue-age-timer{position:relative;display:inline-grid;place-items:center;width:50px;height:50px;align-self:flex-end;flex-shrink:0;font-variant-numeric:tabular-nums}
+.queue-age-timer svg{display:block;width:50px;height:50px;transform:rotate(-90deg)}
+.queue-age-timer circle{fill:none;stroke-width:4}
+.queue-age-track{stroke:#e6dfd4}
+.queue-age-progress{stroke:currentColor;stroke-linecap:round;transition:stroke-dashoffset 1s linear,color 1s linear}
+.queue-age-value{position:absolute;inset:0;display:grid;place-items:center;font-size:11px;font-weight:700;line-height:1}
+.queue-age-timer.is-overdue .queue-age-track{stroke:currentColor}
+.queue-age-timer.is-overdue{animation:queue-age-blink 1.4s ease-in-out infinite}
+@keyframes queue-age-blink{0%,100%{opacity:1}50%{opacity:.3}}
+@media(max-width:700px){.queue-card-heading .queue-age-timer{align-self:flex-start}}
+@media(prefers-reduced-motion:reduce){.queue-age-timer.is-overdue{animation:none}.queue-age-progress{transition:none}}
